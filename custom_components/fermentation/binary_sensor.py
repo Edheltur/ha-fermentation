@@ -11,5 +11,9 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
 class Active(BatchEntity, BinarySensorEntity):
     @property
+    def icon(self):
+        return "mdi:flask" if self.is_on else "mdi:flask-outline"
+
+    @property
     def is_on(self):
         return self.batch.values["active"]

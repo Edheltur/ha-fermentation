@@ -80,6 +80,9 @@ async def test_batch_lifecycle(hass):
     now = dt_util.utcnow()
     assert state(a, "sensor", "sg") == "unavailable"
     await call(a, "datetime", "start", "set_value", now - timedelta(hours=26))
+    active_id = entity(a, "binary_sensor", "active")
+    assert hass.states.get(active_id).attributes["icon"] == "mdi:flask"
+    assert hass.states.get(entity(a, "sensor", "sg")).attributes["icon"] == "mdi:scale-balance"
     assert float(state(a, "sensor", "sg")) == 1.010
     assert float(state(a, "sensor", "duration")) >= 26 * 3600
     with pytest.raises(ServiceValidationError):
@@ -95,6 +98,7 @@ async def test_batch_lifecycle(hass):
     assert state(a, "sensor", "abv") == "unavailable"
     await call(a, "datetime", "end", "set_value", now)
     assert state(a, "binary_sensor", "active") == "off"
+    assert hass.states.get(active_id).attributes["icon"] == "mdi:flask-outline"
     await call(a, "number", "final_hydrometer", "set_value", 3)
     assert float(state(a, "sensor", "final_abv")) > 4
     await hass.config_entries.async_reload(a.entry_id)
@@ -222,7 +226,7 @@ async def test_empty_controls_publish_icons(hass):
         for key, icon in expected.items()
     }
     controls.update(
-        {("datetime", "start"): "mdi:flask-plus", ("datetime", "end"): "mdi:bottle-wine"}
+        {("datetime", "start"): "mdi:calendar-start", ("datetime", "end"): "mdi:calendar-end"}
     )
     for (domain, role), icon in controls.items():
         entity_id = registry.async_get_entity_id(domain, DOMAIN, f"{entry.unique_id}_{role}")

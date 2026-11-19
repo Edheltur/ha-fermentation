@@ -90,10 +90,10 @@
     },
     "datetime": {
       "start": {
-        "name": "Внесение дрожжей"
+        "name": "Старт • дата"
       },
       "end": {
-        "name": "Финиш · дата розлива"
+        "name": "Финиш • дата"
       }
     },
     "number": {
@@ -101,7 +101,7 @@
         "name": "Старт · АС-3"
       },
       "initial_sample_temperature": {
-        "name": "Старт · t° пробы"
+        "name": "Старт · АС-3 t°"
       },
       "initial_refractometer": {
         "name": "Старт · рефрактометр"
@@ -113,7 +113,7 @@
         "name": "Финиш · АС-3"
       },
       "final_sample_temperature": {
-        "name": "Финиш · t° пробы"
+        "name": "Финиш · АС-3 t°"
       },
       "final_refractometer": {
         "name": "Финиш · рефрактометр"

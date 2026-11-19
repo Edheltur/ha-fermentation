@@ -5,17 +5,17 @@ from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, Sen
 from .entity import BatchEntity
 
 METRICS = {
-    "duration": ("s", 0),
-    "sg": ("SG", 4),
-    "brix": ("°Bx", 2),
-    "temperature": ("°C", 1),
-    "abv": ("%", 2),
-    "delta": ("°Bx", 2),
-    "og": ("SG", 4),
-    "fg": ("SG", 4),
-    "sample_wcf": (None, 4),
-    "final_abv": ("%", 2),
-    "attenuation": ("%", 1),
+    "duration": ("mdi:timer-sand", "s", 0),
+    "sg": ("mdi:scale-balance", "SG", 4),
+    "brix": ("mdi:cube-outline", "°Bx", 2),
+    "temperature": ("mdi:thermometer-water", "°C", 1),
+    "abv": ("mdi:percent-outline", "%", 2),
+    "delta": ("mdi:chart-timeline-variant", "°Bx", 2),
+    "og": ("mdi:flag-outline", "SG", 4),
+    "fg": ("mdi:flag-checkered", "SG", 4),
+    "sample_wcf": ("mdi:division", None, 4),
+    "final_abv": ("mdi:beer-outline", "%", 2),
+    "attenuation": ("mdi:chart-waterfall", "%", 1),
 }
 
 
@@ -26,9 +26,11 @@ async def async_setup_entry(hass, entry, async_add_entities):
 class BatchSensor(BatchEntity, SensorEntity):
     def __init__(self, entry, role):
         super().__init__(entry, role)
-        self._attr_native_unit_of_measurement, self._attr_suggested_display_precision = METRICS[
-            role
-        ]
+        (
+            self._attr_icon,
+            self._attr_native_unit_of_measurement,
+            self._attr_suggested_display_precision,
+        ) = METRICS[role]
         if role in ("sg", "brix", "temperature", "abv", "delta"):
             self._attr_state_class = SensorStateClass.MEASUREMENT
         if role == "temperature":

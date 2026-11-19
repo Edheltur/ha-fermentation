@@ -101,7 +101,7 @@
         "name": "At pitch · Hydrometer"
       },
       "initial_sample_temperature": {
-        "name": "At pitch · Sample temp."
+        "name": "At pitch · Hydrometer temp."
       },
       "initial_refractometer": {
         "name": "At pitch · Refractometer"
@@ -113,7 +113,7 @@
         "name": "Bottling · Hydrometer"
       },
       "final_sample_temperature": {
-        "name": "Bottling · Sample temp."
+        "name": "Bottling · Hydrometer temp."
       },
       "final_refractometer": {
         "name": "Bottling · Refractometer"
