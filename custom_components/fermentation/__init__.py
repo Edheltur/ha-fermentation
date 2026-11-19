@@ -1,23 +1,10 @@
 """Track a fermentation as one Home Assistant device."""
 
 from homeassistant.const import Platform
-from homeassistant.helpers.service import async_register_platform_entity_service
 
 from .batch import Batch, sample_store
-from .const import DOMAIN
 
 PLATFORMS = (Platform.BINARY_SENSOR, Platform.DATETIME, Platform.NUMBER, Platform.SENSOR)
-
-
-async def async_setup(hass, config):
-    for platform, service in (
-        (Platform.DATETIME, "clear_date"),
-        (Platform.NUMBER, "clear_reading"),
-    ):
-        async_register_platform_entity_service(
-            hass, DOMAIN, service, entity_domain=platform, func="async_clear", schema={}
-        )
-    return True
 
 
 async def async_setup_entry(hass, entry):

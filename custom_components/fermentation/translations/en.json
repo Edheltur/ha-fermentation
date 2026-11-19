@@ -133,15 +133,5 @@
     "invalid_interval": {
       "message": "Set the start before the bottling date."
     }
-  },
-  "services": {
-    "clear_date": {
-      "name": "Clear date",
-      "description": "Clear the selected start or bottling date."
-    },
-    "clear_reading": {
-      "name": "Clear reading",
-      "description": "Remove the selected manual reading from the sample."
-    }
   }
 }

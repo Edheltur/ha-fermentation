@@ -69,17 +69,18 @@ async def test_batch_lifecycle(hass):
     def state(entry, domain, role):
         return hass.states.get(entity(entry, domain, role)).state
 
-    async def call(entry, domain, role, service, value=None):
-        args = {"entity_id": entity(entry, domain, role)}
-        if value is not None:
-            args["datetime" if domain == "datetime" else "value"] = value
+    async def set_value(entry, domain, role, value):
+        field = "datetime" if domain == "datetime" else "value"
         await hass.services.async_call(
-            DOMAIN if service.startswith("clear") else domain, service, args, blocking=True
+            domain,
+            "set_value",
+            {"entity_id": entity(entry, domain, role), field: value},
+            blocking=True,
         )
 
     now = dt_util.utcnow()
     assert state(a, "sensor", "sg") == "unavailable"
-    await call(a, "datetime", "start", "set_value", now - timedelta(hours=26))
+    await set_value(a, "datetime", "start", now - timedelta(hours=26))
     active_id = entity(a, "binary_sensor", "active")
     assert hass.states.get(active_id).attributes["icon"] == "mdi:flask"
     assert hass.states.get(entity(a, "sensor", "sg")).attributes["icon"] == "mdi:scale-balance"
@@ -88,9 +89,9 @@ async def test_batch_lifecycle(hass):
     assert duration.attributes["unit_of_measurement"] == "d"
     assert float(duration.state) == pytest.approx(26 / 24, abs=1 / 86400)
     with pytest.raises(ServiceValidationError):
-        await call(b, "datetime", "start", "set_value", now)
+        await set_value(b, "datetime", "start", now)
     assert state(b, "datetime", "start") == "unknown"
-    await call(a, "number", "initial_hydrometer", "set_value", 12)
+    await set_value(a, "number", "initial_hydrometer", 12)
     assert float(state(a, "sensor", "abv")) > 4
     batch = a.runtime_data
     batch.sample(now)
@@ -98,24 +99,18 @@ async def test_batch_lifecycle(hass):
     hass.states.async_set(source.entity_id, "unavailable")
     await hass.async_block_till_done()
     assert state(a, "sensor", "abv") == "unavailable"
-    await call(a, "datetime", "end", "set_value", now)
+    await set_value(a, "datetime", "end", now)
     assert state(a, "binary_sensor", "active") == "off"
     assert hass.states.get(active_id).attributes["icon"] == "mdi:flask-outline"
-    await call(a, "number", "final_hydrometer", "set_value", 3)
+    await set_value(a, "number", "final_hydrometer", 3)
     assert float(state(a, "sensor", "final_abv")) > 4
     assert state(a, "sensor", "refractometer_abv") == "unavailable"
-    await call(a, "number", "initial_refractometer", "set_value", 12.5)
-    await call(a, "number", "final_refractometer", "set_value", 4)
+    await set_value(a, "number", "initial_refractometer", 12.5)
+    await set_value(a, "number", "final_refractometer", 4)
     assert float(state(a, "sensor", "refractometer_abv")) == pytest.approx(5.94719, abs=0.00001)
-    await call(a, "number", "final_refractometer", "clear_reading")
-    assert state(a, "sensor", "refractometer_abv") == "unavailable"
     await hass.config_entries.async_reload(a.entry_id)
     assert state(a, "binary_sensor", "active") == "off"
     assert float(state(a, "number", "final_hydrometer")) == 3
-    await call(a, "datetime", "end", "clear_date")
-    assert state(a, "binary_sensor", "active") == "on"
-    await call(a, "number", "final_hydrometer", "clear_reading")
-    assert state(a, "sensor", "final_abv") == "unavailable"
 
 
 async def test_sampling_and_source_recovery(hass):
@@ -163,7 +158,7 @@ async def test_sampling_and_source_recovery(hass):
     assert batch.values["sg"] == 1.02
 
 
-async def test_shared_boundary_and_resume_conflict(hass):
+async def test_shared_boundary_and_overlap_conflict(hass):
     device = await pill(hass)
     sg = er.async_get(hass).async_get_or_create(
         "sensor", "rapt_ble", "pill-specific_gravity", device_id=device.id
@@ -175,7 +170,7 @@ async def test_shared_boundary_and_resume_conflict(hass):
     earlier.set_field("end", boundary.timestamp())
     later.set_field("start", boundary.timestamp())
     with pytest.raises(ServiceValidationError):
-        earlier.set_field("end", None)
+        earlier.set_field("end", (boundary + timedelta(minutes=1)).timestamp())
     with patch("custom_components.fermentation.batch.dt_util.utcnow", return_value=boundary):
         earlier.reschedule(boundary)
         later.reschedule(boundary)

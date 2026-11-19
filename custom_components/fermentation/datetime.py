@@ -4,14 +4,14 @@ from datetime import UTC, datetime
 
 from homeassistant.components.datetime import DateTimeEntity
 
-from .entity import EditableField
+from .entity import BatchEntity
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
     async_add_entities(BatchDate(entry, role) for role in ("start", "end"))
 
 
-class BatchDate(EditableField, DateTimeEntity):
+class BatchDate(BatchEntity, DateTimeEntity):
     def __init__(self, entry, role):
         super().__init__(entry, role)
         self._attr_icon = "mdi:calendar-start" if role == "start" else "mdi:calendar-end"

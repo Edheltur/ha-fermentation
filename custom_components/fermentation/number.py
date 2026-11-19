@@ -3,7 +3,7 @@
 from homeassistant.components.number import NumberEntity, NumberMode
 
 from .const import SAMPLES
-from .entity import EditableField
+from .entity import BatchEntity
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -14,7 +14,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
     )
 
 
-class SampleField(EditableField, NumberEntity):
+class SampleField(BatchEntity, NumberEntity):
     _attr_mode = NumberMode.BOX
 
     def __init__(self, entry, role, settings):

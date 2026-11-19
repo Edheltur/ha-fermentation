@@ -23,8 +23,3 @@ class BatchEntity(Entity):
         await super().async_added_to_hass()
         self.batch.listeners.add(self.async_write_ha_state)
         self.async_on_remove(lambda: self.batch.listeners.discard(self.async_write_ha_state))
-
-
-class EditableField(BatchEntity):
-    async def async_clear(self):
-        self.batch.set_field(self.role, None)
