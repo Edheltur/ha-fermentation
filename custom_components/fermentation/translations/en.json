@@ -90,7 +90,7 @@
     },
     "datetime": {
       "start": {
-        "name": "Fermentation start"
+        "name": "Add yeast"
       },
       "end": {
         "name": "Bottling date"
@@ -98,28 +98,28 @@
     },
     "number": {
       "initial_hydrometer": {
-        "name": "Initial sample · hydrometer"
+        "name": "At pitch · Hydrometer"
       },
       "initial_sample_temperature": {
-        "name": "Initial sample · hydrometer temperature"
+        "name": "At pitch · Sample temp."
       },
       "initial_refractometer": {
-        "name": "Initial sample · refractometer"
+        "name": "At pitch · Refractometer"
       },
       "initial_ph": {
-        "name": "Initial sample · pH"
+        "name": "At pitch · pH"
       },
       "final_hydrometer": {
-        "name": "Final sample · hydrometer"
+        "name": "Bottling · Hydrometer"
       },
       "final_sample_temperature": {
-        "name": "Final sample · hydrometer temperature"
+        "name": "Bottling · Sample temp."
       },
       "final_refractometer": {
-        "name": "Final sample · refractometer"
+        "name": "Bottling · Refractometer"
       },
       "final_ph": {
-        "name": "Final sample · pH"
+        "name": "Bottling · pH"
       }
     }
   },

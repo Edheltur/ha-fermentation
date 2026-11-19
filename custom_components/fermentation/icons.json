@@ -1,0 +1,38 @@
+{
+  "entity": {
+    "datetime": {
+      "start": {
+        "default": "mdi:flask-plus"
+      },
+      "end": {
+        "default": "mdi:bottle-wine"
+      }
+    },
+    "number": {
+      "initial_hydrometer": {
+        "default": "mdi:gauge"
+      },
+      "initial_sample_temperature": {
+        "default": "mdi:thermometer"
+      },
+      "initial_refractometer": {
+        "default": "mdi:angle-acute"
+      },
+      "initial_ph": {
+        "default": "mdi:test-tube"
+      },
+      "final_hydrometer": {
+        "default": "mdi:gauge"
+      },
+      "final_sample_temperature": {
+        "default": "mdi:thermometer"
+      },
+      "final_refractometer": {
+        "default": "mdi:angle-acute"
+      },
+      "final_ph": {
+        "default": "mdi:test-tube"
+      }
+    }
+  }
+}
