@@ -1,0 +1,144 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Add fermentation",
+        "data": {
+          "pill": "RAPT Pill",
+          "name": "Batch name",
+          "description": "Description",
+          "wcf": "Working WCF"
+        },
+        "data_description": {
+          "pill": "Device from RAPT Bluetooth with a specific gravity sensor.",
+          "name": "Shown on the batch device.",
+          "description": "Optional batch notes, such as the yeast strain.",
+          "wcf": "Correction for initial refractometer readings. Leave empty if unknown."
+        }
+      },
+      "reconfigure": {
+        "title": "Edit fermentation",
+        "data": {
+          "name": "Batch name",
+          "description": "Description",
+          "wcf": "Working WCF"
+        },
+        "data_description": {
+          "name": "Shown on the batch device.",
+          "description": "Optional batch notes, such as the yeast strain.",
+          "wcf": "Correction for initial refractometer readings. Leave empty if unknown."
+        }
+      },
+      "sources": {
+        "title": "Select source sensors",
+        "data": {
+          "sg": "Specific gravity",
+          "temperature": "Wort temperature"
+        }
+      }
+    },
+    "error": {
+      "empty_name": "Enter a batch name.",
+      "invalid_wcf": "Enter a positive WCF.",
+      "missing_sg": "Enable a specific gravity sensor on this RAPT Bluetooth device."
+    },
+    "abort": {
+      "sources_changed": "The source list changed. Start setup again.",
+      "reconfigure_successful": "Batch updated."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "duration": {
+        "name": "Fermentation duration"
+      },
+      "sg": {
+        "name": "Specific gravity"
+      },
+      "brix": {
+        "name": "Apparent extract"
+      },
+      "temperature": {
+        "name": "Wort temperature"
+      },
+      "abv": {
+        "name": "Alcohol"
+      },
+      "delta": {
+        "name": "24-hour extract change"
+      },
+      "og": {
+        "name": "Original gravity"
+      },
+      "fg": {
+        "name": "Final gravity"
+      },
+      "sample_wcf": {
+        "name": "Initial sample WCF"
+      },
+      "final_abv": {
+        "name": "Alcohol by OG and hydrometer"
+      },
+      "attenuation": {
+        "name": "Apparent attenuation"
+      }
+    },
+    "binary_sensor": {
+      "active": {
+        "name": "Active"
+      }
+    },
+    "datetime": {
+      "start": {
+        "name": "Fermentation start"
+      },
+      "end": {
+        "name": "Bottling date"
+      }
+    },
+    "number": {
+      "initial_hydrometer": {
+        "name": "Initial sample · hydrometer"
+      },
+      "initial_sample_temperature": {
+        "name": "Initial sample · hydrometer temperature"
+      },
+      "initial_refractometer": {
+        "name": "Initial sample · refractometer"
+      },
+      "initial_ph": {
+        "name": "Initial sample · pH"
+      },
+      "final_hydrometer": {
+        "name": "Final sample · hydrometer"
+      },
+      "final_sample_temperature": {
+        "name": "Final sample · hydrometer temperature"
+      },
+      "final_refractometer": {
+        "name": "Final sample · refractometer"
+      },
+      "final_ph": {
+        "name": "Final sample · pH"
+      }
+    }
+  },
+  "exceptions": {
+    "overlap": {
+      "message": "This Pill is assigned to another batch during the selected interval."
+    },
+    "invalid_interval": {
+      "message": "Set the start before the bottling date."
+    }
+  },
+  "services": {
+    "clear_date": {
+      "name": "Clear date",
+      "description": "Clear the selected start or bottling date."
+    },
+    "clear_reading": {
+      "name": "Clear reading",
+      "description": "Remove the selected manual reading from the sample."
+    }
+  }
+}

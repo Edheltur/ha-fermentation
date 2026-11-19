@@ -1,0 +1,10 @@
+clear_date:
+  target:
+    entity:
+      integration: fermentation
+      domain: datetime
+clear_reading:
+  target:
+    entity:
+      integration: fermentation
+      domain: number

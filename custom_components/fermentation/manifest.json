@@ -1,0 +1,11 @@
+{
+  "domain": "fermentation",
+  "name": "Fermentation",
+  "codeowners": ["@Edheltur"],
+  "config_flow": true,
+  "documentation": "https://github.com/Edheltur/ha-fermentation",
+  "integration_type": "device",
+  "iot_class": "calculated",
+  "issue_tracker": "https://github.com/Edheltur/ha-fermentation/issues",
+  "version": "0.1"
+}
