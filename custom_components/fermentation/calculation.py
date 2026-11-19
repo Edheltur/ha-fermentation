@@ -46,7 +46,9 @@ def refractometer_abv(initial, final, wcf):
     return 131.25 * (og - fg)
 
 
-# GOST 6687.2-90, appendix 1, table 1. Rows: 15..25 °C.
+# Source: ГОСТ 6687.2-90, appendix 1, table 1 (saccharometer temperature corrections).
+# https://base.garant.ru/70240954/53f89421bbdaf741eb2d1ecc4ddb4c33/
+# Rows: 15..25 °C. The 20 °C reference row has zero correction by definition.
 # Columns: readings of 5, 10, 15, 20 and 25%. Units: hundredths of a scale point.
 _SACCHAROMETER_CORRECTIONS = (
     (-21, -24, -26, -28, -30),
