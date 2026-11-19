@@ -90,10 +90,10 @@
     },
     "datetime": {
       "start": {
-        "name": "Add yeast"
+        "name": "At pitch"
       },
       "end": {
-        "name": "Bottling date"
+        "name": "Bottling"
       }
     },
     "number": {
