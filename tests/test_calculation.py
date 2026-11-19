@@ -40,3 +40,35 @@ def test_day_boundary_and_medians():
     assert daily_delta([(0, a), (60, a), (120, 1.3), (DAY + 120, b)], DAY + 120) == pytest.approx(
         -0.2
     )
+
+
+@pytest.mark.parametrize(
+    ("reading", "temperature", "expected"),
+    [
+        (5, 15, 4.79),
+        (25, 25, 25.33),
+        (12.2, 22, 12.3144),
+        (12.5, 21.5, 12.5875),
+        (3.2, 20, 3.2),
+        (3.2, 5, None),
+        (3.2, 22, None),
+    ],
+)
+def test_temperature_correction(reading, temperature, expected):
+    data = {
+        "initial_hydrometer": reading,
+        "initial_sample_temperature": temperature,
+        "final_hydrometer": reading,
+        "final_sample_temperature": temperature,
+        "initial_refractometer": 14,
+        "wcf": 1,
+    }
+    result = manual_results(data)
+    if expected is None:
+        assert result["fg"] is None
+        assert result["sample_wcf"] is None
+        assert result["og_source"] == "refractometer"
+    else:
+        assert result["fg"] == pytest.approx(specific_gravity(expected))
+        assert result["og"] == result["fg"]
+        assert result["sample_wcf"] == pytest.approx(14 / expected)

@@ -46,10 +46,45 @@ def refractometer_abv(initial, final, wcf):
     return 131.25 * (og - fg)
 
 
+# GOST 6687.2-90, appendix 1, table 1. Rows: 15..25 °C.
+# Columns: readings of 5, 10, 15, 20 and 25%. Units: hundredths of a scale point.
+_SACCHAROMETER_CORRECTIONS = (
+    (-21, -24, -26, -28, -30),
+    (-18, -19, -21, -23, -24),
+    (-13, -15, -16, -17, -18),
+    (-9, -10, -11, -12, -12),
+    (-5, -5, -6, -6, -6),
+    (0, 0, 0, 0, 0),
+    (5, 6, 6, 6, 6),
+    (11, 11, 12, 12, 13),
+    (16, 17, 18, 19, 20),
+    (22, 23, 24, 26, 26),
+    (28, 30, 31, 32, 33),
+)
+
+
+def hydrometer_at_20(reading, temperature):
+    """Interpolate the scale correction within the published table."""
+    if reading is None or temperature is None or temperature == 20:
+        return reading
+    if not (15 <= temperature <= 25 and 5 <= reading <= 25):
+        return None
+    row = min(int(temperature) - 15, 9)
+    column = min(int(reading / 5) - 1, 3)
+    t = temperature - (15 + row)
+    x = reading / 5 - (1 + column)
+    lower, upper = _SACCHAROMETER_CORRECTIONS[row : row + 2]
+    low = lower[column] + x * (lower[column + 1] - lower[column])
+    high = upper[column] + x * (upper[column + 1] - upper[column])
+    return reading + (low + t * (high - low)) / 100
+
+
 def manual_results(data):
-    initial = data.get("initial_hydrometer")
+    initial = hydrometer_at_20(
+        data.get("initial_hydrometer"), data.get("initial_sample_temperature")
+    )
     optical = data.get("initial_refractometer")
-    final = data.get("final_hydrometer")
+    final = hydrometer_at_20(data.get("final_hydrometer"), data.get("final_sample_temperature"))
     wcf = data.get("wcf")
     source = None
     og = None
