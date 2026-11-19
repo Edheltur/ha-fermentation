@@ -1,6 +1,6 @@
 """Density conversions and fermentation calculations in native instrument units."""
 
-from math import isclose, isfinite
+from math import isfinite
 from statistics import median
 
 DAY = 86400
@@ -73,7 +73,7 @@ _SACCHAROMETER_CORRECTIONS = (
 
 def hydrometer_at_20(reading, temperature):
     """Interpolate the scale correction within the published table."""
-    if reading is None or temperature is None or isclose(temperature, 20, rel_tol=0, abs_tol=1e-9):
+    if reading is None or temperature is None or temperature == 20:
         return reading
     if not (15 <= temperature <= 25 and 5 <= reading <= 25):
         return None
