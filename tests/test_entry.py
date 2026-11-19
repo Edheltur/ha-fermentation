@@ -203,3 +203,29 @@ async def test_reconfigure_archived_optical_batch(hass):
     assert second.runtime_data.values["final_abv"] < original
     assert second.runtime_data.values["active"] is False
     assert second.data["initial_refractometer"] == 12
+
+
+async def test_empty_controls_publish_icons(hass):
+    device = await pill(hass)
+    registry = er.async_get(hass)
+    registry.async_get_or_create("sensor", "rapt_ble", "pill-specific_gravity", device_id=device.id)
+    entry = (await create(hass, device.id))["result"]
+    expected = {
+        "hydrometer": "mdi:gauge",
+        "sample_temperature": "mdi:thermometer",
+        "refractometer": "mdi:angle-acute",
+        "ph": "mdi:test-tube",
+    }
+    controls = {
+        ("number", f"{stage}_{key}"): icon
+        for stage in ("initial", "final")
+        for key, icon in expected.items()
+    }
+    controls.update(
+        {("datetime", "start"): "mdi:flask-plus", ("datetime", "end"): "mdi:bottle-wine"}
+    )
+    for (domain, role), icon in controls.items():
+        entity_id = registry.async_get_entity_id(domain, DOMAIN, f"{entry.unique_id}_{role}")
+        state = hass.states.get(entity_id)
+        assert state.state == "unknown"
+        assert state.attributes["icon"] == icon

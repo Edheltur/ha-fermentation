@@ -12,6 +12,10 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
 
 class BatchDate(EditableField, DateTimeEntity):
+    def __init__(self, entry, role):
+        super().__init__(entry, role)
+        self._attr_icon = "mdi:flask-plus" if role == "start" else "mdi:bottle-wine"
+
     @property
     def native_value(self):
         timestamp = self.batch.data.get(self.role)
