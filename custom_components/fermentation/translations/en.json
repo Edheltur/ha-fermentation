@@ -62,7 +62,7 @@
         "name": "Wort temperature"
       },
       "abv": {
-        "name": "Alcohol"
+        "name": "Alcohol by RAPT Pill"
       },
       "delta": {
         "name": "24-hour extract change"
@@ -77,10 +77,13 @@
         "name": "Initial sample WCF"
       },
       "final_abv": {
-        "name": "Alcohol by OG and hydrometer"
+        "name": "Alcohol by hydrometer"
       },
       "attenuation": {
         "name": "Apparent attenuation"
+      },
+      "refractometer_abv": {
+        "name": "Alcohol by refractometer"
       }
     },
     "binary_sensor": {

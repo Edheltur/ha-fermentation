@@ -33,6 +33,19 @@ def specific_gravity(bx):
     return (low + high) / 2
 
 
+def refractometer_abv(initial, final, wcf):
+    """Estimate finished-beer ABV with Terrill's linear refractometer correction."""
+    if initial is None or final is None or wcf is None or wcf <= 0:
+        return None
+    initial_brix = initial / wcf
+    og = specific_gravity(initial_brix)
+    if og is None or og <= 1 or final >= initial:
+        return None
+    final_brix = final / wcf
+    fg = 1 - 0.00085683 * initial_brix + 0.0034941 * final_brix
+    return 131.25 * (og - fg)
+
+
 def manual_results(data):
     initial = data.get("initial_hydrometer")
     optical = data.get("initial_refractometer")
@@ -58,6 +71,7 @@ def manual_results(data):
         if optical is not None and initial and initial > 0
         else None,
         "final_abv": difference * 131.25 if difference is not None else None,
+        "refractometer_abv": refractometer_abv(optical, data.get("final_refractometer"), wcf),
         "attenuation": difference * 100 / (og - 1) if difference is not None and og > 1 else None,
     }
 

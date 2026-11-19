@@ -1,20 +1,22 @@
 """Live measurements and manual sample results."""
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
+from homeassistant.const import UnitOfTime
 
 from .entity import BatchEntity
 
 METRICS = {
-    "duration": ("mdi:timer-sand", "s", 0),
+    "duration": ("mdi:timer-sand", UnitOfTime.SECONDS, None),
     "sg": ("mdi:scale-balance", "SG", 4),
     "brix": ("mdi:cube-outline", "°Bx", 2),
     "temperature": ("mdi:thermometer-water", "°C", 1),
-    "abv": ("mdi:percent-outline", "%", 2),
+    "abv": ("mdi:liquor", "%", 2),
     "delta": ("mdi:chart-timeline-variant", "°Bx", 2),
     "og": ("mdi:flag-outline", "SG", 4),
     "fg": ("mdi:flag-checkered", "SG", 4),
     "sample_wcf": ("mdi:division", None, 4),
-    "final_abv": ("mdi:beer-outline", "%", 2),
+    "final_abv": ("mdi:liquor", "%", 2),
+    "refractometer_abv": ("mdi:liquor", "%", 2),
     "attenuation": ("mdi:chart-waterfall", "%", 1),
 }
 
@@ -37,6 +39,7 @@ class BatchSensor(BatchEntity, SensorEntity):
             self._attr_device_class = SensorDeviceClass.TEMPERATURE
         elif role == "duration":
             self._attr_device_class = SensorDeviceClass.DURATION
+            self._attr_suggested_unit_of_measurement = UnitOfTime.DAYS
 
     @property
     def native_value(self):

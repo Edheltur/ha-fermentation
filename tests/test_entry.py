@@ -84,7 +84,9 @@ async def test_batch_lifecycle(hass):
     assert hass.states.get(active_id).attributes["icon"] == "mdi:flask"
     assert hass.states.get(entity(a, "sensor", "sg")).attributes["icon"] == "mdi:scale-balance"
     assert float(state(a, "sensor", "sg")) == 1.010
-    assert float(state(a, "sensor", "duration")) >= 26 * 3600
+    duration = hass.states.get(entity(a, "sensor", "duration"))
+    assert duration.attributes["unit_of_measurement"] == "d"
+    assert float(duration.state) == pytest.approx(26 / 24, abs=1 / 86400)
     with pytest.raises(ServiceValidationError):
         await call(b, "datetime", "start", "set_value", now)
     assert state(b, "datetime", "start") == "unknown"
@@ -101,6 +103,12 @@ async def test_batch_lifecycle(hass):
     assert hass.states.get(active_id).attributes["icon"] == "mdi:flask-outline"
     await call(a, "number", "final_hydrometer", "set_value", 3)
     assert float(state(a, "sensor", "final_abv")) > 4
+    assert state(a, "sensor", "refractometer_abv") == "unavailable"
+    await call(a, "number", "initial_refractometer", "set_value", 12.5)
+    await call(a, "number", "final_refractometer", "set_value", 4)
+    assert float(state(a, "sensor", "refractometer_abv")) == pytest.approx(5.94719, abs=0.00001)
+    await call(a, "number", "final_refractometer", "clear_reading")
+    assert state(a, "sensor", "refractometer_abv") == "unavailable"
     await hass.config_entries.async_reload(a.entry_id)
     assert state(a, "binary_sensor", "active") == "off"
     assert float(state(a, "number", "final_hydrometer")) == 3
