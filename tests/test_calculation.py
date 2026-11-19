@@ -50,6 +50,8 @@ def test_day_boundary_and_medians():
         (12.2, 22, 12.3144),
         (12.5, 21.5, 12.5875),
         (3.2, 20, 3.2),
+        (3.2, 20.000000000000004, 3.2),
+        (3.2, 20.1, None),
         (3.2, 5, None),
         (3.2, 22, None),
     ],
@@ -72,3 +74,10 @@ def test_temperature_correction(reading, temperature, expected):
         assert result["fg"] == pytest.approx(specific_gravity(expected))
         assert result["og"] == result["fg"]
         assert result["sample_wcf"] == pytest.approx(14 / expected)
+
+
+@pytest.mark.parametrize("field", ["initial_hydrometer", "initial_refractometer"])
+def test_zero_initial_extract_has_no_attenuation(field):
+    result = manual_results({field: 0, "wcf": 1.04, "final_hydrometer": -0.1})
+    assert result["og"] is not None
+    assert result["attenuation"] is None

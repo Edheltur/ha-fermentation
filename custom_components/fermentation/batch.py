@@ -14,7 +14,7 @@ from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_conversion import TemperatureConverter
 
-from .calculation import DAY, WINDOW, brix, daily_delta, manual_results, numeric
+from .calculation import DAY, WINDOW, brix, daily_delta, manual_results, numeric, sg_reading
 from .const import DOMAIN
 
 
@@ -44,7 +44,8 @@ class Batch:
         return self.entry.data
 
     async def load(self):
-        self.points = await self.store.async_load() or []
+        stored = await self.store.async_load() or []
+        self.points = [(t, sg) for t, value in stored if (sg := sg_reading(value)) is not None]
         self.reschedule()
 
     def stop(self):
@@ -116,6 +117,8 @@ class Batch:
         state = self.hass.states.get(entity_id) if entity_id else None
         if state is None:
             return None
+        if role == "sg":
+            return sg_reading(state.state)
         value = numeric(state.state)
         if role == "temperature" and value is not None:
             unit = state.attributes.get("unit_of_measurement")

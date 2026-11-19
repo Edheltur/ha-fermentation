@@ -142,14 +142,16 @@ async def test_sampling_and_source_recovery(hass):
     batch.sample(now)
     assert batch.values["delta"] < 0
     expected = list(batch.points)
+    batch.points.append((now.timestamp(), 1e308))
     await hass.config_entries.async_reload(entry.entry_id)
     batch = entry.runtime_data
     assert batch.points == expected
     assert batch.values["delta"] < 0
-    hass.states.async_set(sg.entity_id, "nan")
-    await hass.async_block_till_done()
-    assert batch.values["sg"] is None
-    assert batch.values["delta"] is None
+    for invalid in ("nan", "1e308"):
+        hass.states.async_set(sg.entity_id, invalid)
+        await hass.async_block_till_done()
+        assert batch.values["sg"] is None
+        assert batch.values["delta"] is None
     assert batch.values["temperature"] == pytest.approx(20)
     batch.sample(now)
     assert batch.points == expected

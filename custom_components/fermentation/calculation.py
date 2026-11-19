@@ -1,18 +1,24 @@
 """Density conversions and fermentation calculations in native instrument units."""
 
-from math import isfinite
+from math import isclose, isfinite
 from statistics import median
 
 DAY = 86400
 WINDOW = 1800
+SG_MIN, SG_MAX = 0.8, 1.5
 
 
 def numeric(value):
     try:
         result = float(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return None
     return result if isfinite(result) else None
+
+
+def sg_reading(value):
+    sg = numeric(value)
+    return sg if sg is not None and SG_MIN <= sg <= SG_MAX else None
 
 
 def brix(sg):
@@ -21,7 +27,7 @@ def brix(sg):
 
 def specific_gravity(bx):
     """Invert the monotonic polynomial within the manual instrument range."""
-    low, high = 0.8, 1.5
+    low, high = SG_MIN, SG_MAX
     if not brix(low) <= bx <= brix(high):
         return None
     for _ in range(52):
@@ -67,7 +73,7 @@ _SACCHAROMETER_CORRECTIONS = (
 
 def hydrometer_at_20(reading, temperature):
     """Interpolate the scale correction within the published table."""
-    if reading is None or temperature is None or temperature == 20:
+    if reading is None or temperature is None or isclose(temperature, 20, rel_tol=0, abs_tol=1e-9):
         return reading
     if not (15 <= temperature <= 25 and 5 <= reading <= 25):
         return None
@@ -89,14 +95,16 @@ def manual_results(data):
     final = hydrometer_at_20(data.get("final_hydrometer"), data.get("final_sample_temperature"))
     wcf = data.get("wcf")
     source = None
-    og = None
+    initial_brix = None
     if initial is not None:
-        og = specific_gravity(initial)
+        initial_brix = initial
         source = "hydrometer"
     elif optical is not None and wcf:
-        og = specific_gravity(optical / wcf)
-        if og is not None:
-            source = "refractometer"
+        initial_brix = optical / wcf
+        source = "refractometer"
+    og = specific_gravity(initial_brix) if initial_brix is not None else None
+    if og is None:
+        source = None
     fg = specific_gravity(final) if final is not None else None
     difference = og - fg if og is not None and fg is not None else None
     return {
@@ -109,7 +117,9 @@ def manual_results(data):
         else None,
         "final_abv": difference * 131.25 if difference is not None else None,
         "refractometer_abv": refractometer_abv(optical, data.get("final_refractometer"), wcf),
-        "attenuation": difference * 100 / (og - 1) if difference is not None and og > 1 else None,
+        "attenuation": difference * 100 / (og - 1)
+        if difference is not None and initial_brix > 0 and og > 1
+        else None,
     }
 
 
