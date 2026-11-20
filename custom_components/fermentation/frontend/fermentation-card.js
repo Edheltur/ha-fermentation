@@ -709,4 +709,11 @@ class FermentationCard extends HTMLElement {
 
 if (!customElements.get("fermentation-card")) {
   customElements.define("fermentation-card", FermentationCard);
+  window.customCards ??= [];
+  window.customCards.push({
+    type: "fermentation-card",
+    name: "Fermentation",
+    description: "Show fermentation history and manage batch samples.",
+    documentationURL: "https://github.com/Edheltur/ha-fermentation#дашборд",
+  });
 }
