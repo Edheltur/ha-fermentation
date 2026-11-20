@@ -13,7 +13,7 @@
           "pill": "Device from RAPT Bluetooth with a specific gravity sensor.",
           "name": "Shown on the batch device.",
           "description": "Optional batch notes, such as the yeast strain.",
-          "wcf": "Refractometer wort correction factor. Used for refractometer OG and for ABV from two optical readings. Optional."
+          "wcf": "Refractometer wort correction factor. Used for refractometer OG and for ABV from two optical readings. If unknown, enter 1.04."
         }
       },
       "reconfigure": {
@@ -26,7 +26,7 @@
         "data_description": {
           "name": "Shown on the batch device.",
           "description": "Optional batch notes, such as the yeast strain.",
-          "wcf": "Refractometer wort correction factor. Used for refractometer OG and for ABV from two optical readings. Optional."
+          "wcf": "Refractometer wort correction factor. Used for refractometer OG and for ABV from two optical readings. If unknown, enter 1.04."
         }
       },
       "sources": {
