@@ -227,6 +227,7 @@ class FermentationCard extends HTMLElement {
       .dates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin: 12px 0; }
       .dates div { display: grid; gap: 4px; }
       ha-expansion-panel {
+        --input-fill-color: transparent;
         --expansion-panel-summary-padding: 0;
         --expansion-panel-content-padding: 0;
         margin-top: 4px;
