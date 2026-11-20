@@ -1,12 +1,15 @@
-import { batchStatus, celsius, defaultBatch, historyWindow, loadHistory, number, SERIES } from "./history.js";
+import { batchStatus, defaultBatch, historyWindow, loadHistory, number, SERIES } from "./history.js";
 
 const TEXT = {
   ru: {
-    active: "Активна", scheduled: "Запланирована", finished: "Завершена",
-    title: "Ферментация", choose: "Выберите ферментацию", empty: "Нет доступных ферментаций",
+    scheduled: "Брожение ещё не началось",
+    active: (elapsed) => `Брожение идёт ${elapsed}`,
+    finished: (elapsed) => `Брожение завершено за ${elapsed}`,
+    remaining: (left) => `осталось ${left}`,
+    choose: "Выберите ферментацию", empty: "Нет доступных ферментаций",
     duration: "Длительность", delta: "∆ за 24 ч", abv: "Алкоголь по Pill",
-    brix: "Плотность", temperature: "Температура сусла", insufficient: "Недостаточно истории",
-    all: "Вся", showAbv: "Показать алкоголь", loading: "Загрузка истории…",
+    brix: "Плотность", temperature: "Температура", chartAbv: "Алкоголь",
+    all: "Вся", loading: "Загрузка истории…",
     noHistory: "Нет записанной истории", hourly: "Средние за час",
     apex: "Установите и загрузите ресурс apexcharts-card для просмотра графика.",
     error: "Не удалось загрузить данные", historyError: "Не удалось загрузить историю",
@@ -23,11 +26,14 @@ const TEXT = {
     dateError: "Не удалось сохранить дату",
   },
   en: {
-    active: "Active", scheduled: "Scheduled", finished: "Finished",
-    title: "Fermentation", choose: "Select a fermentation", empty: "No available fermentations",
+    scheduled: "Fermentation has not started",
+    active: (elapsed) => `Fermenting for ${elapsed}`,
+    finished: (elapsed) => `Fermentation completed in ${elapsed}`,
+    remaining: (left) => `${left} left`,
+    choose: "Select a fermentation", empty: "No available fermentations",
     duration: "Duration", delta: "24 h change", abv: "Pill ABV",
-    brix: "Gravity", temperature: "Wort temperature", insufficient: "Insufficient history",
-    all: "All", showAbv: "Show ABV", loading: "Loading history…",
+    brix: "Gravity", temperature: "Temperature", chartAbv: "ABV",
+    all: "All", loading: "Loading history…",
     noHistory: "No recorded history", hourly: "Hourly averages",
     apex: "Install and load the apexcharts-card resource to view the chart.",
     error: "Could not load data", historyError: "Could not load history",
@@ -78,23 +84,46 @@ function durationText(seconds, russian) {
   return parts.join(" ");
 }
 
-function chartConfig(series, start, end, t, locale, timeZone) {
+function fermentationStatus(batch, status, now, t, russian) {
+  if (status === "scheduled") return t.scheduled;
+
+  const compact = (seconds) => {
+    const totalHours = Math.max(0, Math.floor(seconds / 3600));
+    const days = Math.floor(totalHours / 24);
+    const hours = totalHours % 24;
+    const dayText = days ? `${days}${russian ? "д" : "d"}` : "";
+    const hourText = hours || !days ? `${hours}${russian ? "ч" : "h"}` : "";
+    return dayText + hourText;
+  };
+  if (status === "finished") return t.finished(compact(batch.end - batch.start));
+
+  const elapsed = t.active(compact(now - batch.start));
+  return batch.end == null ? elapsed : `${elapsed}, ${t.remaining(compact(batch.end - now))}`;
+}
+
+function chartSeriesName(t, role) {
+  return role === "abv" ? t.chartAbv : t[role];
+}
+
+function chartConfig(series, start, end, t, locale, timeZone, period, active) {
   // Anchor span.offset to a calendar boundary so a finished chart does not drift.
   const base = new Date(new Date().getFullYear(), 0, 1).getTime();
   const offset = start - base;
-  const dateFormatter = `EVAL:function(value) {
-    return new Intl.DateTimeFormat(${JSON.stringify(locale)}, {
-      timeZone: ${JSON.stringify(timeZone)}, month: 'short', day: 'numeric',
-      hour: '2-digit', minute: '2-digit'
-    }).format(Number(value));
+  const dateFormatter = (options) => `EVAL:function(value) {
+    return new Intl.DateTimeFormat(${JSON.stringify(locale)}, ${JSON.stringify({ timeZone, ...options })})
+      .format(Number(value));
   }`;
+  const date = { day: "numeric", month: "short" };
+  const time = { hour: "2-digit", minute: "2-digit" };
+  const axisDate = dateFormatter(period === 1 ? time : date);
+  const seriesUnits = series.map(({ unit, precision }) => ({ unit, precision }));
   return {
     type: "custom:apexcharts-card",
     graph_span: `${end - start}ms`,
     span: { start: "year", offset: `${offset >= 0 ? "+" : ""}${offset}ms` },
     header: { show: false },
     series: series.map(({ role, entity, color, precision }) => ({
-      entity, name: t[role], color, float_precision: precision,
+      entity, name: chartSeriesName(t, role), color, float_precision: precision,
       stroke_width: 2, stroke_dash: role === "abv" ? 5 : 0, curve: "straight",
       extend_to: false, data_generator: "return entity.attributes.fermentation_points;",
     })),
@@ -109,19 +138,33 @@ function chartConfig(series, start, end, t, locale, timeZone) {
           }`,
         },
       },
-      yaxis: series.map(({ role, color, unit, precision }) => ({
-        seriesName: t[role], opposite: role !== "brix", decimalsInFloat: precision, tickAmount: 4,
-        title: { text: unit, style: { color } },
+      yaxis: series.map(({ role, color, precision }) => ({
+        seriesName: chartSeriesName(t, role), opposite: role !== "brix",
+        showAlways: false, decimalsInFloat: precision, tickAmount: 4,
         labels: { style: { colors: color } },
       })),
-      legend: { show: false },
-      xaxis: { labels: { formatter: `EVAL:function(_value, timestamp) {
-        const format = ${dateFormatter.slice(5)};
-        return format(timestamp);
-      }` } },
+      legend: {
+        show: true, position: "bottom", onItemClick: { toggleDataSeries: true },
+        formatter: `EVAL:function(name, { seriesIndex, w }) {
+          const { unit, precision } = ${JSON.stringify(seriesUnits)}[seriesIndex];
+          const point = w.config.series[seriesIndex]?.data?.at(-1);
+          const value = Array.isArray(point) ? point[1] : point?.y;
+          if (!${active}) return name + ' · ' + unit;
+          const formatted = Number.isFinite(value)
+            ? new Intl.NumberFormat(${JSON.stringify(locale)}, { maximumFractionDigits: precision,
+                minimumFractionDigits: precision }).format(value)
+            : '—';
+          return name + ': ' + formatted + ' ' + unit;
+        }`,
+      },
+      xaxis: { labels: { rotate: 0, showDuplicates: false, hideOverlappingLabels: true,
+        formatter: `EVAL:function(_value, timestamp) {
+          const format = ${axisDate.slice(5)};
+          return Number.isFinite(timestamp) ? format(timestamp) : '';
+        }` } },
       tooltip: {
         shared: true, intersect: false, hideEmptySeries: false,
-        x: { formatter: dateFormatter },
+        x: { formatter: dateFormatter({ ...date, ...time }) },
         y: series.map(({ unit, precision }) => ({
           formatter: `EVAL:function(value) {
             return Number.isFinite(value)
@@ -141,7 +184,6 @@ class FermentationCard extends HTMLElement {
     this.attachShadow({ mode: "open" });
     this.batches = [];
     this.period = 3;
-    this.showAbv = false;
     const style = node("style");
     style.textContent = `
       :host { display: block; min-width: 0; }
@@ -153,7 +195,7 @@ class FermentationCard extends HTMLElement {
       button { padding: 5px 7px; min-height: 36px; cursor: pointer; }
       button[aria-pressed="true"] { color: var(--primary-color); border-color: currentColor; }
       button:disabled { opacity: .5; cursor: default; }
-      select { min-height: 40px; width: 100%; padding: 4px 8px; margin-top: 8px; }
+      select { min-height: 40px; width: 100%; padding: 4px 8px; }
       .muted, small { color: var(--secondary-text-color); }
       .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 78px), 1fr));
         gap: 6px; margin: 14px 0; }
@@ -161,10 +203,6 @@ class FermentationCard extends HTMLElement {
         background: var(--secondary-background-color); border-radius: 8px; overflow-wrap: anywhere; }
       .metric strong { font-size: 1.05rem; }
       .controls { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
-      .controls label { display: inline-flex; align-items: center; gap: 3px; min-height: 36px; }
-      .legend { display: flex; flex-wrap: wrap; gap: 5px 12px; margin: 8px 0 4px; font-size: .875rem; }
-      .legend span::before { content: ""; width: .6rem; height: .6rem; border-radius: 50%;
-        display: inline-block; margin-inline-end: .35rem; background: var(--series-color); }
       .chart { min-width: 0; }
       .chart > apexcharts-card { --ha-card-border-width: 0; --ha-card-box-shadow: none; }
       .dates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin: 12px 0; }
@@ -188,19 +226,17 @@ class FermentationCard extends HTMLElement {
       [hidden] { display: none !important; }
     `;
     const card = node("ha-card");
-    this.heading = node("h2");
-    this.statusLabel = node("div", null, "muted");
+    this.statusLabel = node("p", null, "muted");
     this.picker = node("select");
     this.picker.addEventListener("change", () => this.selectBatch(this.picker.value));
     this.message = node("p", null, "muted");
     this.summary = node("section", null, "metrics");
     this.graph = node("section");
     this.controls = node("div", null, "controls");
-    this.legend = node("div", null, "legend");
     this.historyMessage = node("p", null, "muted");
     this.historyMessage.setAttribute("role", "status");
     this.chart = node("div", null, "chart");
-    this.graph.append(this.controls, this.legend, this.historyMessage, this.chart);
+    this.graph.append(this.controls, this.historyMessage, this.chart);
     this.results = node("section", null, "metrics");
     this.dates = node("section", null, "dates");
     this.samples = node("details");
@@ -217,7 +253,7 @@ class FermentationCard extends HTMLElement {
     this.sections = node("div");
     this.sections.append(this.summary, this.graph, this.results, this.dates, this.samples,
       this.editError, this.details, this.links);
-    card.append(this.heading, this.statusLabel, this.picker, this.message, this.sections);
+    card.append(this.picker, this.statusLabel, this.message, this.sections);
     this.shadowRoot.append(style, card);
   }
 
@@ -364,9 +400,11 @@ class FermentationCard extends HTMLElement {
   render() {
     if (!this.isConnected || !this._hass) return;
     const { t, batch } = this;
-    const status = batch && batchStatus(batch, Date.now());
-    this.heading.textContent = batch?.name ?? t.title;
-    this.statusLabel.textContent = status ? t[status] : "";
+    const now = Date.now();
+    const status = batch && batchStatus(batch, now);
+    this.statusLabel.textContent = status
+      ? fermentationStatus(batch, status, now / 1000, t, this.russian) : "";
+    this.statusLabel.hidden = !status;
     this.picker.hidden = !this.batches.length;
     this.picker.setAttribute("aria-label", t.choose);
     const choices = this.batches.map((entry) => this.currentDates(entry));
@@ -398,7 +436,7 @@ class FermentationCard extends HTMLElement {
       this.chartKey = null;
     }
     this.renderSummary(batch, status);
-    this.renderControls(batch, status);
+    this.renderControls(status);
     this.renderSamples(batch);
     this.renderDetails(batch);
     this.refreshGraph();
@@ -413,11 +451,9 @@ class FermentationCard extends HTMLElement {
     const factor = units[durationState?.attributes.unit_of_measurement];
     const elapsed = duration === null || factor === undefined
       ? "—" : durationText(Math.round(duration * factor), this.russian);
-    const delta = this.value(batch, "delta");
     const telemetry = status === "active"
       ? [[t.duration, elapsed],
-        [t.delta, this.format(delta, 2, "°Bx", "exceptZero"),
-          delta === null && number(this.state(batch, "brix")?.state) !== null ? t.insufficient : ""],
+        [t.delta, this.format(this.value(batch, "delta"), 2, "°Bx", "exceptZero")],
         [t.abv, this.format(this.value(batch, "abv"), 1, this.abvUnit)]]
       : status === "finished"
         ? [[t.duration, elapsed], ["OG", sg("og")], ["FG", sg("fg")]]
@@ -427,10 +463,9 @@ class FermentationCard extends HTMLElement {
         ...["final_abv", "refractometer_abv"].map((role) => [
           t[role], this.format(this.value(batch, role), 1, this.abvUnit),
         ])] : [];
-    const tiles = (items) => items.map(([label, value, help]) => {
+    const tiles = (items) => items.map(([label, value]) => {
       const box = node("div", null, "metric");
       box.append(node("small", label), node("strong", value));
-      if (help) box.append(node("small", help));
       return box;
     });
     this.updateSection(this.summary, telemetry, () => tiles(telemetry));
@@ -438,45 +473,15 @@ class FermentationCard extends HTMLElement {
     this.results.hidden = !results.length;
   }
 
-  renderControls(batch, status) {
-    const { t } = this;
+  renderControls(status) {
     this.graph.hidden = status === "scheduled";
-    this.updateSection(this.controls, [this.period, this.showAbv, batch.roles.abv], () => {
-      const periods = PERIODS.map((days) => {
-        const el = button(days == null ? t.all : durationText(days * 86400, this.russian), () => {
-          this.period = days;
-          this.render();
-        });
-        el.setAttribute("aria-pressed", String(days === this.period));
-        return el;
+    this.updateSection(this.controls, this.period, () => PERIODS.map((days) => {
+      const label = days == null ? this.t.all : durationText(days * 86400, this.russian);
+      const el = button(label, () => {
+        this.period = days;
+        this.render();
       });
-      if (batch.roles.abv) {
-        const label = node("label");
-        const toggle = node("input");
-        toggle.type = "checkbox";
-        toggle.checked = this.showAbv;
-        toggle.addEventListener("change", () => {
-          this.showAbv = toggle.checked;
-          this.render();
-          this.controls.querySelector("input")?.focus();
-        });
-        label.append(toggle, t.showAbv);
-        periods.push(label);
-      }
-      return periods;
-    });
-
-    const legend = SERIES.filter(({ role }) => (role !== "abv" || this.showAbv) && batch.roles[role])
-      .map(({ role, unit, color, precision }) => {
-        const state = this.state(batch, role);
-        const value = number(state?.state);
-        return [t[role], unit, color, status === "active"
-          ? this.format(role === "temperature" ? celsius(value, state?.attributes.unit_of_measurement) : value,
-            precision, unit) : unit];
-      });
-    this.updateSection(this.legend, legend, () => legend.map(([name, unit, color, value]) => {
-      const el = node("span", `${name} · ${value === "—" ? `— ${unit}` : value}`);
-      el.style.setProperty("--series-color", color);
+      el.setAttribute("aria-pressed", String(days === this.period));
       return el;
     }));
   }
@@ -629,7 +634,8 @@ class FermentationCard extends HTMLElement {
 
   mountChart(series, start, end) {
     const apex = document.createElement("apexcharts-card");
-    apex.setConfig(chartConfig(series, start, end, this.t, this.locale, this._hass.config.time_zone));
+    apex.setConfig(chartConfig(series, start, end, this.t, this.locale,
+      this._hass.config.time_zone, this.period, this.chartStatus === "active"));
     const states = { ...this._hass.states };
     for (const { entity, points } of series) {
       states[entity] = { ...states[entity],
@@ -659,10 +665,10 @@ class FermentationCard extends HTMLElement {
       return;
     }
     const [start, end] = historyWindow(batch, this.period, Date.now());
-    const series = SERIES.filter(({ role }) => batch.roles[role] && (role !== "abv" || this.showAbv))
+    const series = SERIES.filter(({ role }) => batch.roles[role])
       .map((item) => ({ ...item, entity: batch.roles[item.role] }));
     const key = JSON.stringify([batch.id, batch.start, batch.end, this.chartStatus, this.period,
-      this.showAbv, series, this.locale, this._hass.config.time_zone,
+      series, this.locale, this._hass.config.time_zone,
       this.coverage?.recorder, start < this.coverage?.oldest * 1000]);
     if (this.pendingChart?.key === key || (key === this.chartKey && !force)) return;
     if (key !== this.chartKey) {
@@ -690,7 +696,7 @@ class FermentationCard extends HTMLElement {
       if (this.apexChart && this.chartSeries === chartSeries) {
         await this.apexChart.updateOptions({
           xaxis: { min: start, max: end },
-          series: result.series.map(({ role, points }) => ({ name: this.t[role], data: points })),
+          series: result.series.map(({ role, points }) => ({ name: chartSeriesName(this.t, role), data: points })),
         }, false, false);
       } else {
         this.mountChart(result.series, start, end);
