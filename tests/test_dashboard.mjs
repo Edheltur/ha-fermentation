@@ -36,6 +36,7 @@ test("detailed history holds stable values and keeps an explicit gap", async () 
           { lu: start / 1000, s: "8" },
           { lu: (start + HOUR) / 1000, s: "unavailable" },
           { lu: (start + 2 * HOUR) / 1000, s: "4" },
+          { lu: (start + 3 * HOUR) / 1000, s: "5" },
         ],
         "sensor.temp": [{ lu: start / 1000, s: "68", a: { unit_of_measurement: "°F" } }],
       };
@@ -47,7 +48,9 @@ test("detailed history holds stable values and keeps an explicit gap", async () 
   assert.equal(gravity.get(start + HOUR - 1), 8);
   assert.equal(gravity.get(start + HOUR), null);
   assert.equal(gravity.get(start + 2 * HOUR - 1), null);
-  assert.equal(gravity.get(end), 4);
+  assert.equal(gravity.get(start + 3 * HOUR), 5);
+  assert.equal(gravity.has(start + 3 * HOUR - 1), false);
+  assert.equal(gravity.get(end), 5);
   assert.equal(temperature.get(start + HOUR), 20);
   assert.equal(temperature.get(end), 20);
 });
