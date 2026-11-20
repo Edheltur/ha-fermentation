@@ -228,8 +228,11 @@ class FermentationCard extends HTMLElement {
       .chart { min-width: 0; margin-inline: -14px; }
       .dates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin: 12px 0; }
       .dates div { display: grid; gap: 4px; }
-      details { margin-top: 10px; }
-      summary { padding: 8px 0; cursor: pointer; font-weight: 600; }
+      ha-expansion-panel {
+        --expansion-panel-summary-padding: 0;
+        --expansion-panel-content-padding: 0;
+        margin-top: 4px;
+      }
       table { border-collapse: collapse; width: 100%; table-layout: fixed; }
       th, td { padding: 4px 2px; text-align: start; overflow-wrap: anywhere; vertical-align: top; }
       th:first-child { width: 34%; }
@@ -261,14 +264,12 @@ class FermentationCard extends HTMLElement {
     this.graph.append(this.controls, this.historyMessage, this.chart);
     this.results = node("section", null, "metrics");
     this.dates = node("section", null, "dates");
-    this.samples = node("details");
-    this.samplesHeading = node("summary");
+    this.samples = node("ha-expansion-panel");
     this.sampleValues = node("div");
-    this.samples.append(this.samplesHeading, this.sampleValues);
-    this.details = node("details");
-    this.detailsHeading = node("summary");
+    this.samples.append(this.sampleValues);
+    this.details = node("ha-expansion-panel");
     this.diagnostic = node("div");
-    this.details.append(this.detailsHeading, this.diagnostic);
+    this.details.append(this.diagnostic);
     this.editError = node("p");
     this.editError.setAttribute("role", "alert");
     this.links = node("div", null, "links");
@@ -407,7 +408,7 @@ class FermentationCard extends HTMLElement {
       this.chartStatus = null;
       this.chartKey = null;
       this.editError.textContent = "";
-      this.details.open = false;
+      this.details.expanded = false;
       this.dateDialog?.close();
     }
     if (render) this.render();
@@ -459,7 +460,7 @@ class FermentationCard extends HTMLElement {
     }
     if (status !== this.chartStatus) {
       this.period = status === "finished" ? null : 3;
-      if (!this.chartStatus || status === "finished") this.samples.open = status !== "active";
+      if (!this.chartStatus || status === "finished") this.samples.expanded = status !== "active";
       this.chartStatus = status;
       this.chartKey = null;
     }
@@ -515,7 +516,7 @@ class FermentationCard extends HTMLElement {
 
   renderSamples(batch) {
     const { t } = this;
-    this.samplesHeading.textContent = t.samples;
+    this.samples.header = t.samples;
     const dates = [
       [t.start, batch.start, t.setStart, batch.roles.start, false],
       [t.finish, batch.end, t.setFinish, batch.roles.end, batch.start == null],
@@ -634,7 +635,7 @@ class FermentationCard extends HTMLElement {
 
   renderDetails(batch) {
     const { t } = this;
-    this.detailsHeading.textContent = t.details;
+    this.details.header = t.details;
     const source = this.state(batch, "og")?.attributes.og_source;
     const diagnostics = [
       [t.ogSource, { hydrometer: t.hydrometerSource, refractometer: t.refractometerSource }[source] ?? "—"],
