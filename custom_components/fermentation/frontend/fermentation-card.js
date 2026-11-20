@@ -211,13 +211,13 @@ class FermentationCard extends HTMLElement {
       ha-card { display: block; padding: 16px; overflow: hidden; }
       h2 { margin: 0; font-size: 1.25rem; overflow-wrap: anywhere; }
       p { margin: 8px 0; }
-      select, button { font: inherit; color: inherit;
+      button { font: inherit; color: inherit;
         border: 1px solid var(--ha-color-border-neutral-quiet, var(--divider-color));
-        border-radius: 8px; background: var(--ha-color-form-background, transparent); }
-      button { padding: 5px 7px; min-height: 36px; cursor: pointer; }
+        border-radius: 8px; background: var(--ha-color-form-background, transparent);
+        padding: 5px 7px; min-height: 36px; cursor: pointer; }
       button[aria-pressed="true"] { color: var(--primary-color); border-color: currentColor; }
       button:disabled { opacity: .5; cursor: default; }
-      select { min-height: 40px; width: 100%; padding: 4px 8px; }
+      ha-control-select-menu { display: block; }
       .muted, small { color: var(--secondary-text-color); }
       .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 78px), 1fr));
         gap: 6px; margin: 14px 0; }
@@ -252,8 +252,9 @@ class FermentationCard extends HTMLElement {
     const card = node("ha-card");
     this.statusLabel = node("p", null, "muted");
     this.densityChange = node("p", null, "muted");
-    this.picker = node("select");
-    this.picker.addEventListener("change", () => this.selectBatch(this.picker.value));
+    this.picker = node("ha-control-select-menu");
+    this.picker.showArrow = true;
+    this.picker.addEventListener("wa-select", (event) => this.selectBatch(event.detail.item.value));
     this.message = node("p", null, "muted");
     this.summary = node("section", null, "metrics");
     this.graph = node("section");
@@ -435,20 +436,13 @@ class FermentationCard extends HTMLElement {
     this.densityChange.textContent = delta === null
       ? "" : `${t.delta}: ${this.format(delta, 2, "°Bx", "exceptZero")}`;
     this.picker.hidden = !this.batches.length;
-    this.picker.setAttribute("aria-label", t.choose);
-    const choices = this.batches.map((entry) => this.currentDates(entry));
-    this.updateSection(this.picker, [choices.map(({ id, name, start }) => [id, name, start]),
-      this._hass.config.time_zone], () => {
-      const prompt = node("option", t.choose);
-      prompt.value = "";
-      prompt.disabled = true;
-      return [prompt, ...choices.map(({ id, name, start }) => {
-        const option = node("option", start == null ? name : `${name} · ${this.formatDate(start)}`);
-        option.value = id;
-        return option;
-      })];
+    this.picker.label = t.choose;
+    this.picker.hideLabel = !!batch;
+    this.picker.options = this.batches.map((entry) => {
+      const { id, name, start } = this.currentDates(entry);
+      return { value: id, label: start == null ? name : `${name} · ${this.formatDate(start)}` };
     });
-    this.picker.value = this.selected ?? "";
+    this.picker.value = batch?.id;
     this.message.textContent = this.batchesError ? t.error
       : !this.coverage ? t.pending : this.batches.length ? "" : t.empty;
     this.message.hidden = !this.message.textContent;
