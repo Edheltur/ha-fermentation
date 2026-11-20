@@ -9,7 +9,7 @@ const TEXT = {
     choose: "Выберите ферментацию", empty: "Нет доступных ферментаций",
     delta: "Изменение плотности за 24 часа",
     brix: "Плотность", temperature: "Температура", chartAbv: "Алкоголь",
-    all: "Вся", loading: "Загрузка истории…",
+    period: "Период графика", all: "Вся", loading: "Загрузка истории…",
     noHistory: "Нет записанной истории", hourly: "Средние за час",
     apex: "Установите и загрузите ресурс apexcharts-card для просмотра графика.",
     error: "Не удалось загрузить данные", historyError: "Не удалось загрузить историю",
@@ -33,7 +33,7 @@ const TEXT = {
     choose: "Select a fermentation", empty: "No available fermentations",
     delta: "Gravity change over 24 hours",
     brix: "Gravity", temperature: "Temperature", chartAbv: "ABV",
-    all: "All", loading: "Loading history…",
+    period: "Chart period", all: "All", loading: "Loading history…",
     noHistory: "No recorded history", hourly: "Hourly averages",
     apex: "Install and load the apexcharts-card resource to view the chart.",
     error: "Could not load data", historyError: "Could not load history",
@@ -148,12 +148,15 @@ function chartConfig(series, start, end, t, locale, timeZone, period, active) {
           }`,
         },
       },
-      grid: { padding: { left: axisPadding, right: axisPadding } },
+      grid: {
+        borderColor: "color-mix(in srgb, var(--primary-text-color) 25%, transparent)",
+        padding: { left: axisPadding, right: axisPadding },
+      },
       yaxis: series.map(({ role, color, precision }) => ({
         seriesName: chartSeriesName(t, role), opposite: role !== "brix",
         showAlways: false, decimalsInFloat: precision, tickAmount: 4,
         labels: {
-          style: { colors: color },
+          style: { colors: `color-mix(in srgb, var(--primary-text-color) 55%, ${color})` },
           formatter: `EVAL:${numberFormat(precision, { maximumFractionDigits: precision })}`,
         },
       })),
@@ -170,11 +173,17 @@ function chartConfig(series, start, end, t, locale, timeZone, period, active) {
           return name + ': ' + formatted + ' ' + unit;
         }`,
       },
-      xaxis: { labels: { rotate: 0, showDuplicates: false, hideOverlappingLabels: true,
-        formatter: `EVAL:function(_value, timestamp) {
-          const format = ${dateFormat(period === 1 ? time : { ...date, month: "numeric" })};
-          return Number.isFinite(timestamp) ? format(timestamp) : '';
-        }` } },
+      xaxis: {
+        axisBorder: { color: "var(--secondary-text-color)" },
+        axisTicks: { color: "var(--secondary-text-color)" },
+        labels: {
+          rotate: 0, showDuplicates: false, hideOverlappingLabels: true,
+          formatter: `EVAL:function(_value, timestamp) {
+            const format = ${dateFormat(period === 1 ? time : { ...date, month: "numeric" })};
+            return Number.isFinite(timestamp) ? format(timestamp) : '';
+          }`,
+        },
+      },
       tooltip: {
         shared: true, intersect: false, hideEmptySeries: false,
         x: { formatter: `EVAL:${dateFormat({ ...date, ...time })}` },
@@ -202,25 +211,26 @@ class FermentationCard extends HTMLElement {
       ha-card { display: block; padding: 16px; overflow: hidden; }
       h2 { margin: 0; font-size: 1.25rem; overflow-wrap: anywhere; }
       p { margin: 8px 0; }
-      select, button { font: inherit; color: inherit; border: 1px solid var(--divider-color);
-        border-radius: 8px; background: var(--card-background-color); }
-      button { padding: 5px 7px; min-height: 36px; cursor: pointer; }
-      button[aria-pressed="true"] { color: var(--primary-color); border-color: currentColor; }
+      button { font: inherit; color: inherit;
+        border: 1px solid var(--ha-color-border-neutral-quiet, var(--divider-color));
+        border-radius: 8px; background: var(--ha-color-form-background, transparent);
+        padding: 5px 7px; min-height: 36px; cursor: pointer; }
       button:disabled { opacity: .5; cursor: default; }
-      select { min-height: 40px; width: 100%; padding: 4px 8px; }
+      ha-control-select-menu { display: block; }
       .muted, small { color: var(--secondary-text-color); }
       .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 78px), 1fr));
         gap: 6px; margin: 14px 0; }
       .metric { display: grid; gap: 4px; align-content: start; padding: 8px 6px; text-align: center;
         background: var(--secondary-background-color); border-radius: 8px; overflow-wrap: anywhere; }
       .metric strong { font-size: 1.05rem; }
-      .controls { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
       .chart { min-width: 0; margin-inline: -14px; }
-      .chart > apexcharts-card { --ha-card-border-width: 0; --ha-card-box-shadow: none; }
       .dates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin: 12px 0; }
       .dates div { display: grid; gap: 4px; }
-      details { margin-top: 10px; }
-      summary { padding: 8px 0; cursor: pointer; font-weight: 600; }
+      ha-expansion-panel {
+        --expansion-panel-summary-padding: 0;
+        --expansion-panel-content-padding: 0;
+        margin-top: 4px;
+      }
       table { border-collapse: collapse; width: 100%; table-layout: fixed; }
       th, td { padding: 4px 2px; text-align: start; overflow-wrap: anywhere; vertical-align: top; }
       th:first-child { width: 34%; }
@@ -240,26 +250,30 @@ class FermentationCard extends HTMLElement {
     const card = node("ha-card");
     this.statusLabel = node("p", null, "muted");
     this.densityChange = node("p", null, "muted");
-    this.picker = node("select");
-    this.picker.addEventListener("change", () => this.selectBatch(this.picker.value));
+    this.picker = node("ha-control-select-menu");
+    this.picker.showArrow = true;
+    this.picker.addEventListener("wa-select", (event) => this.selectBatch(event.detail.item.value));
     this.message = node("p", null, "muted");
     this.summary = node("section", null, "metrics");
     this.graph = node("section");
-    this.controls = node("div", null, "controls");
+    this.periodControl = node("ha-control-select");
+    this.periodControl.addEventListener("value-changed", (event) => {
+      const { value } = event.detail;
+      this.period = value === "all" ? null : Number(value);
+      this.render();
+    });
     this.historyMessage = node("p", null, "muted");
     this.historyMessage.setAttribute("role", "status");
     this.chart = node("div", null, "chart");
-    this.graph.append(this.controls, this.historyMessage, this.chart);
+    this.graph.append(this.periodControl, this.historyMessage, this.chart);
     this.results = node("section", null, "metrics");
     this.dates = node("section", null, "dates");
-    this.samples = node("details");
-    this.samplesHeading = node("summary");
+    this.samples = node("ha-expansion-panel");
     this.sampleValues = node("div");
-    this.samples.append(this.samplesHeading, this.sampleValues);
-    this.details = node("details");
-    this.detailsHeading = node("summary");
+    this.samples.append(this.sampleValues);
+    this.details = node("ha-expansion-panel");
     this.diagnostic = node("div");
-    this.details.append(this.detailsHeading, this.diagnostic);
+    this.details.append(this.diagnostic);
     this.editError = node("p");
     this.editError.setAttribute("role", "alert");
     this.links = node("div", null, "links");
@@ -398,7 +412,7 @@ class FermentationCard extends HTMLElement {
       this.chartStatus = null;
       this.chartKey = null;
       this.editError.textContent = "";
-      this.details.open = false;
+      this.details.expanded = false;
       this.dateDialog?.close();
     }
     if (render) this.render();
@@ -425,20 +439,13 @@ class FermentationCard extends HTMLElement {
     this.densityChange.textContent = delta === null
       ? "" : `${t.delta}: ${this.format(delta, 2, "°Bx", "exceptZero")}`;
     this.picker.hidden = !this.batches.length;
-    this.picker.setAttribute("aria-label", t.choose);
-    const choices = this.batches.map((entry) => this.currentDates(entry));
-    this.updateSection(this.picker, [choices.map(({ id, name, start }) => [id, name, start]),
-      this._hass.config.time_zone], () => {
-      const prompt = node("option", t.choose);
-      prompt.value = "";
-      prompt.disabled = true;
-      return [prompt, ...choices.map(({ id, name, start }) => {
-        const option = node("option", start == null ? name : `${name} · ${this.formatDate(start)}`);
-        option.value = id;
-        return option;
-      })];
+    this.picker.label = t.choose;
+    this.picker.hideLabel = !!batch;
+    this.picker.options = this.batches.map((entry) => {
+      const { id, name, start } = this.currentDates(entry);
+      return { value: id, label: start == null ? name : `${name} · ${this.formatDate(start)}` };
     });
-    this.picker.value = this.selected ?? "";
+    this.picker.value = batch?.id;
     this.message.textContent = this.batchesError ? t.error
       : !this.coverage ? t.pending : this.batches.length ? "" : t.empty;
     this.message.hidden = !this.message.textContent;
@@ -450,7 +457,7 @@ class FermentationCard extends HTMLElement {
     }
     if (status !== this.chartStatus) {
       this.period = status === "finished" ? null : 3;
-      if (!this.chartStatus || status === "finished") this.samples.open = status !== "active";
+      if (!this.chartStatus || status === "finished") this.samples.expanded = status !== "active";
       this.chartStatus = status;
       this.chartKey = null;
     }
@@ -487,15 +494,12 @@ class FermentationCard extends HTMLElement {
 
   renderControls(status) {
     this.graph.hidden = status === "scheduled";
-    this.updateSection(this.controls, this.period, () => PERIODS.map((days) => {
-      const label = days == null ? this.t.all : durationText(days * 86400, this.locale);
-      const el = button(label, () => {
-        this.period = days;
-        this.render();
-      });
-      el.setAttribute("aria-pressed", String(days === this.period));
-      return el;
+    this.periodControl.label = this.t.period;
+    this.periodControl.options = PERIODS.map((days) => ({
+      value: String(days ?? "all"),
+      label: days == null ? this.t.all : durationText(days * 86400, this.locale),
     }));
+    this.periodControl.value = String(this.period ?? "all");
   }
 
   moreInfo(id) {
@@ -506,7 +510,7 @@ class FermentationCard extends HTMLElement {
 
   renderSamples(batch) {
     const { t } = this;
-    this.samplesHeading.textContent = t.samples;
+    this.samples.header = t.samples;
     const dates = [
       [t.start, batch.start, t.setStart, batch.roles.start, false],
       [t.finish, batch.end, t.setFinish, batch.roles.end, batch.start == null],
@@ -625,7 +629,7 @@ class FermentationCard extends HTMLElement {
 
   renderDetails(batch) {
     const { t } = this;
-    this.detailsHeading.textContent = t.details;
+    this.details.header = t.details;
     const source = this.state(batch, "og")?.attributes.og_source;
     const diagnostics = [
       [t.ogSource, { hydrometer: t.hydrometerSource, refractometer: t.refractometerSource }[source] ?? "—"],
@@ -669,6 +673,19 @@ class FermentationCard extends HTMLElement {
       this.resizeChart();
     }, { once: true });
     this.chart.replaceChildren(apex);
+    // The embedded chart uses the Fermentation card as its surface.
+    const style = node("style");
+    style.textContent = `
+      ha-card {
+        background: transparent !important;
+        border: 0 !important;
+        box-shadow: none !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+      }
+      ha-card::before, ha-card::after { content: none !important; }
+    `;
+    apex.shadowRoot?.append(style);
   }
 
   clearChart() {
