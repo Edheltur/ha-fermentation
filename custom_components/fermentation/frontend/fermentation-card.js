@@ -235,11 +235,37 @@ class FermentationCard extends HTMLElement {
         --expansion-panel-content-padding: 0;
         margin-top: 4px;
       }
-      table { border-collapse: collapse; width: 100%; table-layout: fixed; }
-      th, td { padding: 4px 2px; text-align: start; overflow-wrap: anywhere; vertical-align: top; }
-      th:first-child { width: 34%; }
-      td > div { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
-      .clear { min-width: 32px; color: var(--secondary-text-color); }
+      .samples-table, .samples-table thead, .samples-table tbody {
+        display: grid;
+        gap: 6px;
+      }
+      .samples-table tr {
+        display: grid;
+        grid-template-columns: minmax(0, 1.1fr) repeat(2, minmax(0, 1fr));
+        align-items: start;
+        gap: 6px;
+      }
+      .samples-table th, .samples-table td {
+        min-width: 0;
+        text-align: start;
+        overflow-wrap: anywhere;
+      }
+      .samples-table tbody th { align-self: center; }
+      .samples-table td { container-type: inline-size; }
+      .sample-actions {
+        display: grid;
+        justify-items: start;
+        gap: 4px;
+      }
+      @container (min-width: 96px) {
+        .sample-actions {
+          grid-template-columns: minmax(0, 1fr) auto;
+          align-items: center;
+        }
+      }
+      .sample-reading { max-width: 100%; }
+      .sample-reading::part(base) { padding-inline: 0; }
+      .sample-reading[disabled] ha-label { opacity: .5; }
       .links { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 12px; }
       a { color: var(--primary-color); }
       dialog { box-sizing: border-box; width: min(360px, calc(100vw - 32px)); padding: 16px;
@@ -563,31 +589,51 @@ class FermentationCard extends HTMLElement {
         !!this.state(batch, role)?.attributes.outside_correction_table];
     }));
     this.updateSection(this.sampleValues, probes, () => {
-      const table = node("table");
-      const header = table.createTHead().insertRow();
+      const table = node("table", null, "samples-table");
+      table.setAttribute("role", "table");
+      const head = table.createTHead();
+      head.setAttribute("role", "rowgroup");
+      const header = head.insertRow();
+      header.setAttribute("role", "row");
       for (const label of ["", t.start, t.finish]) {
         const cell = node("th", label);
         cell.scope = "col";
+        cell.setAttribute("role", "columnheader");
         header.append(cell);
       }
       const body = table.createTBody();
+      body.setAttribute("role", "rowgroup");
       probes.forEach((values, index) => {
         const row = body.insertRow();
+        row.setAttribute("role", "row");
         const title = t[PROBES[index]];
         const heading = node("th", title);
         heading.scope = "row";
+        heading.setAttribute("role", "rowheader");
         row.append(heading);
         values.forEach(([id, value, precision, warning], column) => {
           const cell = row.insertCell();
-          const actions = node("div");
+          cell.setAttribute("role", "cell");
+          const actions = node("div", null, "sample-actions");
           const reading = this.format(value, precision);
           const stage = column === 0 ? t.start : t.finish;
-          const edit = button(reading, () => this.moreInfo(id), !id);
+          const edit = node("ha-button", null, "sample-reading");
+          edit.size = "s";
+          edit.appearance = "plain";
+          edit.variant = "neutral";
+          edit.disabled = !id;
           edit.setAttribute("aria-label", `${stage} · ${title} · ${reading}`);
+          edit.addEventListener("click", () => this.moreInfo(id));
+          const label = node("ha-label", reading);
+          label.dense = true;
+          edit.append(label);
           actions.append(edit);
           if (id && value !== null) {
-            const clear = button("×", () => this.clearSample(id, clear));
-            clear.className = "clear";
+            const clear = node("ha-button", "×");
+            clear.size = "s";
+            clear.appearance = "plain";
+            clear.variant = "neutral";
+            clear.addEventListener("click", () => this.clearSample(id, clear));
             clear.title = t.clear;
             clear.setAttribute("aria-label", `${t.clear} · ${stage} · ${title}`);
             actions.append(clear);
