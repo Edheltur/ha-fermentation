@@ -55,6 +55,8 @@ const PROBES = ["hydrometer", "sample_temperature", "refractometer", "ph"];
 const PERIODS = [1, 3, 10, null];
 const REFRESH = 60_000;
 const MIN_CHART_HEIGHT = 260;
+const Y_AXIS_TICKS = 4;
+const MIN_Y_SPAN = { brix: 2, temperature: 4, abv: 2 };
 const ABV_RU = "% об.";
 
 function node(tag, text = null, className = "") {
@@ -109,6 +111,23 @@ function chartHeight() {
   return Math.max(MIN_CHART_HEIGHT, Math.ceil(window.innerHeight / 2));
 }
 
+function minimumAxisBounds({ role, points }) {
+  let low = Infinity;
+  let high = -Infinity;
+  for (const [, value] of points) {
+    if (!Number.isFinite(value)) continue;
+    low = Math.min(low, value);
+    high = Math.max(high, value);
+  }
+
+  const span = MIN_Y_SPAN[role];
+  if (low === Infinity || high - low >= span) return { min: undefined, max: undefined };
+
+  const step = span / Y_AXIS_TICKS;
+  const min = Math.floor((low + (high - low - span) / 2) / step) * step;
+  return { min, max: Math.max(min + span, Math.ceil(high / step) * step) };
+}
+
 function chartConfig(series, start, end, t, locale, timeZone, period, active) {
   // Anchor span.offset to a calendar boundary so a finished chart does not drift.
   const base = new Date(new Date().getFullYear(), 0, 1).getTime();
@@ -152,9 +171,10 @@ function chartConfig(series, start, end, t, locale, timeZone, period, active) {
         borderColor: "color-mix(in srgb, var(--primary-text-color) 25%, transparent)",
         padding: { left: axisPadding, right: axisPadding },
       },
-      yaxis: series.map(({ role, color, precision }) => ({
+      yaxis: series.map(({ role, color, precision, points }) => ({
+        ...minimumAxisBounds({ role, points }),
         seriesName: chartSeriesName(t, role), opposite: role !== "brix",
-        showAlways: false, decimalsInFloat: precision, tickAmount: 4,
+        showAlways: false, decimalsInFloat: precision, tickAmount: Y_AXIS_TICKS,
         labels: {
           // A positive offset moves the right-side labels toward the plot.
           offsetX: role === "abv" ? 14 : 0,
@@ -814,6 +834,10 @@ class FermentationCard extends HTMLElement {
       if (this.apexChart && this.chartSeries === chartSeries) {
         await this.apexChart.updateOptions({
           xaxis: { min: start, max: end },
+          // ApexCharts replaces the axis array, so keep the existing formatters and styles.
+          yaxis: this.apexChart.w.config.yaxis.map((axis, index) => ({
+            ...axis, ...minimumAxisBounds(result.series[index]),
+          })),
           series: result.series.map(({ role, points }) => ({ name: chartSeriesName(this.t, role), data: points })),
         }, false, false);
       } else {
