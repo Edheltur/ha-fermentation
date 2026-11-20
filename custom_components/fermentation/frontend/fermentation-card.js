@@ -167,10 +167,11 @@ function chartConfig(series, start, end, t, locale, timeZone, period, active) {
     header: { show: false },
     series: series.map(({ role, entity, color, precision }) => ({
       entity, name: chartSeriesName(t, role), color, float_precision: precision,
-      stroke_width: 2, stroke_dash: role === "abv" ? 5 : 0, curve: "straight",
+      stroke_width: 1.5, stroke_dash: role === "abv" ? 5 : 0, curve: "smooth",
       extend_to: false, data_generator: "return entity.attributes.fermentation_points;",
     })),
     apex_config: {
+      stroke: { lineCap: "round" },
       chart: {
         height: chartHeight(), toolbar: { show: false }, zoom: { enabled: false }, animations: { enabled: false },
         events: {
@@ -298,7 +299,8 @@ class FermentationCard extends HTMLElement {
       }
       @container (min-width: 96px) {
         .sample-actions {
-          grid-template-columns: minmax(0, 1fr) auto;
+          grid-template-columns: fit-content(100%) auto;
+          justify-content: start;
           align-items: center;
         }
       }
