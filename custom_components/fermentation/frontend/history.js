@@ -82,18 +82,17 @@ function visibleTimes(changes, start, end, times) {
   let previous = null;
   let bucketId = -1;
   let min, max;
-  const add = (time) => {
-    times.add(time);
-    if (time > start) times.add(time - 1);
-  };
   const finishBucket = () => {
     if (!min) return;
-    add(min[0]);
-    add(max[0]);
+    times.add(min[0]);
+    times.add(max[0]);
   };
   for (const [time, value] of changes) {
     if (time > end) break;
-    if ((value === null) !== (previous === null)) add(time);
+    if ((value === null) !== (previous === null)) {
+      times.add(time);
+      if (time > start) times.add(time - 1);
+    }
     previous = value;
     if (value === null) continue;
     const bucket = Math.floor((time - start) * DISPLAY_BUCKETS / (end - start));
