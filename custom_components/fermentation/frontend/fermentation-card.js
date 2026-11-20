@@ -381,11 +381,25 @@ class FermentationCard extends HTMLElement {
     return unit ? `${digits} ${unit}` : digits;
   }
 
-  formatDate(timestamp, time = false) {
+  formatDate(timestamp) {
     return new Intl.DateTimeFormat(this.locale, {
-      timeZone: this._hass.config.time_zone,
-      dateStyle: "medium", ...(time ? { timeStyle: "short" } : {}),
+      timeZone: this._hass.config.time_zone, dateStyle: "medium",
     }).format(timestamp * 1000);
+  }
+
+  formatButtonDate(timestamp, now) {
+    const value = timestamp * 1000;
+    const timeZone = this._hass.config.time_zone;
+    const dateOptions = { timeZone, day: "numeric", month: "short" };
+    const dateWithYear = new Intl.DateTimeFormat(this.locale, { ...dateOptions, year: "numeric" });
+    const year = (parts) => parts.find(({ type }) => type === "year" || type === "relatedYear")?.value;
+    const parts = dateWithYear.formatToParts(value);
+    if (parts.at(-2)?.type === "year" && parts.at(-1).type === "literal") parts.pop();
+    const date = year(parts) === year(dateWithYear.formatToParts(now))
+      ? new Intl.DateTimeFormat(this.locale, dateOptions).format(value)
+      : parts.map(({ value: part }) => part).join("");
+    const time = new Intl.DateTimeFormat(this.locale, { timeZone, timeStyle: "short" }).format(value);
+    return `${date} ${time}`;
   }
 
   async refreshBatches() {
@@ -467,7 +481,7 @@ class FermentationCard extends HTMLElement {
     }
     this.renderSummary(batch, status);
     this.renderControls(batch, status, now);
-    this.renderSamples(batch);
+    this.renderSamples(batch, now);
     this.renderDetails(batch);
     this.refreshGraph();
   }
@@ -520,17 +534,19 @@ class FermentationCard extends HTMLElement {
     }));
   }
 
-  renderSamples(batch) {
+  renderSamples(batch, now) {
     const { t } = this;
     this.samples.header = t.samples;
     const dates = [
       [t.start, batch.start, t.setStart, batch.roles.start, false],
       [t.finish, batch.end, t.setFinish, batch.roles.end, batch.start == null],
-    ];
-    this.updateSection(this.dates, [dates, this._hass.config.time_zone], () => dates.map(
-      ([title, value, prompt, id, disabled]) => {
+    ].map(([title, value, prompt, id, disabled]) => ({
+      title, value, prompt, id, disabled,
+      label: value == null ? prompt : this.formatButtonDate(value, now),
+    }));
+    this.updateSection(this.dates, dates, () => dates.map(
+      ({ title, value, prompt, id, disabled, label }) => {
         const cell = node("div");
-        const label = value == null ? prompt : this.formatDate(value, true);
         const control = node("ha-button", label);
         control.appearance = "outlined";
         control.variant = "neutral";
