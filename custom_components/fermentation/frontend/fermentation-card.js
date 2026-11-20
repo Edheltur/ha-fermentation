@@ -52,6 +52,11 @@ const TEXT = {
 };
 
 const PROBES = ["hydrometer", "sample_temperature", "refractometer", "ph"];
+const STATUS_ICONS = {
+  scheduled: "mdi:clock-outline",
+  active: "mdi:flask",
+  finished: "mdi:check-circle-outline",
+};
 const PERIODS = [1, 3, 10, null];
 const REFRESH = 60_000;
 const MIN_CHART_HEIGHT = 260;
@@ -250,6 +255,9 @@ class FermentationCard extends HTMLElement {
         padding: 5px 7px; min-height: 36px; cursor: pointer; }
       button:disabled { opacity: .5; cursor: default; }
       ha-control-select-menu { display: block; }
+      .batch-status:not([hidden]) { display: flex; align-items: center; gap: 6px; }
+      .batch-status ha-state-icon { flex: none; --mdc-icon-size: 20px; }
+      .batch-status[data-status="active"] ha-state-icon { color: var(--primary-color); }
       .muted, small { color: var(--secondary-text-color); }
       .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 78px), 1fr));
         gap: 6px; margin: 14px 0; }
@@ -326,7 +334,11 @@ class FermentationCard extends HTMLElement {
       [hidden] { display: none !important; }
     `;
     const card = node("ha-card");
-    this.statusLabel = node("p", null, "muted");
+    this.statusLabel = node("p", null, "batch-status muted");
+    this.statusIcon = node("ha-state-icon");
+    this.statusIcon.setAttribute("aria-hidden", "true");
+    this.statusText = node("span");
+    this.statusLabel.append(this.statusIcon, this.statusText);
     this.densityChange = node("p", null, "muted");
     this.picker = node("ha-control-select-menu");
     this.picker.showArrow = true;
@@ -526,7 +538,11 @@ class FermentationCard extends HTMLElement {
     const { t, batch } = this;
     const now = Date.now();
     const status = batch && batchStatus(batch, now);
-    this.statusLabel.textContent = status
+    this.statusLabel.dataset.status = status ?? "";
+    this.statusIcon.hass = this._hass;
+    this.statusIcon.stateObj = batch ? this.state(batch, "active") : undefined;
+    this.statusIcon.icon = STATUS_ICONS[status];
+    this.statusText.textContent = status
       ? fermentationStatus(batch, status, now / 1000, t, this.locale) : "";
     this.statusLabel.hidden = !status;
     const delta = status === "active" ? this.value(batch, "delta") : null;
