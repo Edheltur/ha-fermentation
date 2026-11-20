@@ -74,6 +74,20 @@ function button(text, action, disabled = false) {
   return el;
 }
 
+function actionBadge(text, action) {
+  const badge = node("ha-badge", text);
+  if (!action) return badge;
+
+  badge.type = "button";
+  badge.addEventListener("click", action);
+  badge.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    if (!event.repeat) badge.click();
+  });
+  return badge;
+}
+
 function durationText(seconds, locale, style = "long") {
   const totalHours = Math.max(0, Math.floor(seconds / 3600));
   const days = Math.floor(totalHours / 24);
@@ -288,9 +302,14 @@ class FermentationCard extends HTMLElement {
           align-items: center;
         }
       }
-      .sample-reading { max-width: 100%; }
-      .sample-reading::part(base) { padding-inline: 0; }
-      .sample-reading[disabled] ha-label { opacity: .5; }
+      .visually-hidden {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
       .links { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 12px; }
       a { color: var(--primary-color); }
       dialog { box-sizing: border-box; width: min(360px, calc(100vw - 32px)); padding: 16px;
@@ -597,17 +616,11 @@ class FermentationCard extends HTMLElement {
     }));
     this.updateSection(this.dates, dates, () => dates.map(
       ({ title, value, prompt, id, disabled, label }) => {
-        const badge = node("ha-badge", label);
+        const action = id && !disabled
+          ? () => value == null ? this.setInitialDate(id, prompt) : this.moreInfo(id)
+          : null;
+        const badge = actionBadge(label, action);
         badge.label = title;
-        if (id && !disabled) {
-          badge.type = "button";
-          badge.addEventListener("click", () => value == null ? this.setInitialDate(id, prompt) : this.moreInfo(id));
-          badge.addEventListener("keydown", (event) => {
-            if (event.key !== "Enter" && event.key !== " ") return;
-            event.preventDefault();
-            if (!event.repeat) badge.click();
-          });
-        }
         return badge;
       },
     ));
@@ -645,16 +658,8 @@ class FermentationCard extends HTMLElement {
           const actions = node("div", null, "sample-actions");
           const reading = this.format(value, precision);
           const stage = column === 0 ? t.start : t.finish;
-          const edit = node("ha-button", null, "sample-reading");
-          edit.size = "s";
-          edit.appearance = "plain";
-          edit.variant = "neutral";
-          edit.disabled = !id;
-          edit.setAttribute("aria-label", `${stage} · ${title} · ${reading}`);
-          edit.addEventListener("click", () => this.moreInfo(id));
-          const label = node("ha-label", reading);
-          label.dense = true;
-          edit.append(label);
+          const edit = actionBadge(reading, id ? () => this.moreInfo(id) : null);
+          if (id) edit.prepend(node("span", `${stage} · ${title} · `, "visually-hidden"));
           actions.append(edit);
           if (id && value !== null) {
             const clear = node("ha-button", "×");
