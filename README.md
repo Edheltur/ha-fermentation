@@ -34,7 +34,9 @@
 
 1. Установите [ApexCharts Card](https://github.com/RomRider/apexcharts-card) через HACS и убедитесь, что его JavaScript-модуль добавлен в ресурсы дашбордов.
 2. В **Настройки → Панели → Ресурсы** добавьте `/api/fermentation/static/fermentation-card.js` как **JavaScript-модуль**. Для управления ресурсами включите расширенный режим в профиле HA.
-3. Добавьте на панель ручную карточку с этим YAML.
+3. Обновите страницу Home Assistant. В режиме редактирования панели выберите **Добавить карточку → Fermentation**.
+
+Для ручного добавления используйте:
 
 ```yaml
 type: custom:fermentation-card
