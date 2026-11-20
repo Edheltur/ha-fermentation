@@ -9,7 +9,7 @@ const TEXT = {
     choose: "Выберите ферментацию", empty: "Нет доступных ферментаций",
     delta: "Изменение плотности за 24 часа",
     brix: "Плотность", temperature: "Температура", chartAbv: "Алкоголь",
-    period: "Период графика", all: "Вся", loading: "Загрузка истории…",
+    period: "Период графика", fullHistory: "Полная история", loading: "Загрузка истории…",
     noHistory: "Нет записанной истории", hourly: "Средние за час",
     apex: "Установите и загрузите ресурс apexcharts-card для просмотра графика.",
     error: "Не удалось загрузить данные", historyError: "Не удалось загрузить историю",
@@ -33,7 +33,7 @@ const TEXT = {
     choose: "Select a fermentation", empty: "No available fermentations",
     delta: "Gravity change over 24 hours",
     brix: "Gravity", temperature: "Temperature", chartAbv: "ABV",
-    period: "Chart period", all: "All", loading: "Loading history…",
+    period: "Chart period", fullHistory: "Full history", loading: "Loading history…",
     noHistory: "No recorded history", hourly: "Hourly averages",
     apex: "Install and load the apexcharts-card resource to view the chart.",
     error: "Could not load data", historyError: "Could not load history",
@@ -463,7 +463,7 @@ class FermentationCard extends HTMLElement {
       this.chartKey = null;
     }
     this.renderSummary(batch, status);
-    this.renderControls(status);
+    this.renderControls(batch, status, now);
     this.renderSamples(batch);
     this.renderDetails(batch);
     this.refreshGraph();
@@ -493,13 +493,21 @@ class FermentationCard extends HTMLElement {
     this.results.hidden = !results.length;
   }
 
-  renderControls(status) {
+  renderControls(batch, status, now) {
     this.graph.hidden = status === "scheduled";
+    if (this.graph.hidden) return;
+
+    const [start, end] = historyWindow(batch, null, now);
+    const fullDays = Math.max(1, Math.ceil((end - start) / 86_400_000));
     this.periodControl.label = this.t.period;
-    this.periodControl.options = PERIODS.map((days) => ({
-      value: String(days ?? "all"),
-      label: days == null ? this.t.all : durationText(days * 86400, this.locale),
-    }));
+    this.periodControl.options = PERIODS.map((days) => {
+      const label = durationText((days ?? fullDays) * 86400, this.locale);
+      return {
+        value: String(days ?? "all"),
+        label,
+        ariaLabel: days === null ? `${this.t.fullHistory}, ${label}` : label,
+      };
+    });
     this.periodControl.value = String(this.period ?? "all");
   }
 
