@@ -247,8 +247,13 @@ class FermentationCard extends HTMLElement {
         background: var(--secondary-background-color); border-radius: 8px; overflow-wrap: anywhere; }
       .metric strong { font-size: 1.05rem; }
       .chart { min-width: 0; margin-inline: -14px; }
-      .dates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin: 12px 0; }
-      .dates div { display: grid; gap: 4px; }
+      .dates {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 8rem), 1fr));
+        gap: 6px;
+        margin: 12px 0;
+        --ha-badge-size: 44px;
+      }
       ha-expansion-panel {
         --input-fill-color: transparent;
         --expansion-panel-summary-padding: 0;
@@ -433,7 +438,7 @@ class FermentationCard extends HTMLElement {
     }).format(timestamp * 1000);
   }
 
-  formatButtonDate(timestamp, now) {
+  formatBadgeDate(timestamp, now) {
     const value = timestamp * 1000;
     const timeZone = this._hass.config.time_zone;
     const dateOptions = { timeZone, day: "numeric", month: "short" };
@@ -588,19 +593,22 @@ class FermentationCard extends HTMLElement {
       [t.finish, batch.end, t.setFinish, batch.roles.end, batch.start == null],
     ].map(([title, value, prompt, id, disabled]) => ({
       title, value, prompt, id, disabled,
-      label: value == null ? prompt : this.formatButtonDate(value, now),
+      label: value == null ? prompt : this.formatBadgeDate(value, now),
     }));
     this.updateSection(this.dates, dates, () => dates.map(
       ({ title, value, prompt, id, disabled, label }) => {
-        const cell = node("div");
-        const control = node("ha-button", label);
-        control.appearance = "outlined";
-        control.variant = "neutral";
-        control.disabled = !id || disabled;
-        control.setAttribute("aria-label", value == null ? label : `${title}, ${label}`);
-        control.addEventListener("click", () => value == null ? this.setInitialDate(id, prompt) : this.moreInfo(id));
-        cell.append(node("small", title), control);
-        return cell;
+        const badge = node("ha-badge", label);
+        badge.label = title;
+        if (id && !disabled) {
+          badge.type = "button";
+          badge.addEventListener("click", () => value == null ? this.setInitialDate(id, prompt) : this.moreInfo(id));
+          badge.addEventListener("keydown", (event) => {
+            if (event.key !== "Enter" && event.key !== " ") return;
+            event.preventDefault();
+            if (!event.repeat) badge.click();
+          });
+        }
+        return badge;
       },
     ));
     const probes = PROBES.map((key) => ["initial", "final"].map((stage) => {
