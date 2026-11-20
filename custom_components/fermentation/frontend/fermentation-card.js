@@ -9,7 +9,7 @@ const TEXT = {
     choose: "Выберите ферментацию", empty: "Нет доступных ферментаций",
     delta: "Изменение плотности за 24 часа",
     brix: "Плотность", temperature: "Температура", chartAbv: "Алкоголь",
-    all: "Вся", loading: "Загрузка истории…",
+    period: "Период графика", all: "Вся", loading: "Загрузка истории…",
     noHistory: "Нет записанной истории", hourly: "Средние за час",
     apex: "Установите и загрузите ресурс apexcharts-card для просмотра графика.",
     error: "Не удалось загрузить данные", historyError: "Не удалось загрузить историю",
@@ -33,7 +33,7 @@ const TEXT = {
     choose: "Select a fermentation", empty: "No available fermentations",
     delta: "Gravity change over 24 hours",
     brix: "Gravity", temperature: "Temperature", chartAbv: "ABV",
-    all: "All", loading: "Loading history…",
+    period: "Chart period", all: "All", loading: "Loading history…",
     noHistory: "No recorded history", hourly: "Hourly averages",
     apex: "Install and load the apexcharts-card resource to view the chart.",
     error: "Could not load data", historyError: "Could not load history",
@@ -215,7 +215,6 @@ class FermentationCard extends HTMLElement {
         border: 1px solid var(--ha-color-border-neutral-quiet, var(--divider-color));
         border-radius: 8px; background: var(--ha-color-form-background, transparent);
         padding: 5px 7px; min-height: 36px; cursor: pointer; }
-      button[aria-pressed="true"] { color: var(--primary-color); border-color: currentColor; }
       button:disabled { opacity: .5; cursor: default; }
       ha-control-select-menu { display: block; }
       .muted, small { color: var(--secondary-text-color); }
@@ -224,7 +223,6 @@ class FermentationCard extends HTMLElement {
       .metric { display: grid; gap: 4px; align-content: start; padding: 8px 6px; text-align: center;
         background: var(--secondary-background-color); border-radius: 8px; overflow-wrap: anywhere; }
       .metric strong { font-size: 1.05rem; }
-      .controls { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
       .chart { min-width: 0; margin-inline: -14px; }
       .dates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin: 12px 0; }
       .dates div { display: grid; gap: 4px; }
@@ -258,11 +256,16 @@ class FermentationCard extends HTMLElement {
     this.message = node("p", null, "muted");
     this.summary = node("section", null, "metrics");
     this.graph = node("section");
-    this.controls = node("div", null, "controls");
+    this.periodControl = node("ha-control-select");
+    this.periodControl.addEventListener("value-changed", (event) => {
+      const { value } = event.detail;
+      this.period = value === "all" ? null : Number(value);
+      this.render();
+    });
     this.historyMessage = node("p", null, "muted");
     this.historyMessage.setAttribute("role", "status");
     this.chart = node("div", null, "chart");
-    this.graph.append(this.controls, this.historyMessage, this.chart);
+    this.graph.append(this.periodControl, this.historyMessage, this.chart);
     this.results = node("section", null, "metrics");
     this.dates = node("section", null, "dates");
     this.samples = node("ha-expansion-panel");
@@ -491,15 +494,12 @@ class FermentationCard extends HTMLElement {
 
   renderControls(status) {
     this.graph.hidden = status === "scheduled";
-    this.updateSection(this.controls, this.period, () => PERIODS.map((days) => {
-      const label = days == null ? this.t.all : durationText(days * 86400, this.locale);
-      const el = button(label, () => {
-        this.period = days;
-        this.render();
-      });
-      el.setAttribute("aria-pressed", String(days === this.period));
-      return el;
+    this.periodControl.label = this.t.period;
+    this.periodControl.options = PERIODS.map((days) => ({
+      value: String(days ?? "all"),
+      label: days == null ? this.t.all : durationText(days * 86400, this.locale),
     }));
+    this.periodControl.value = String(this.period ?? "all");
   }
 
   moreInfo(id) {
