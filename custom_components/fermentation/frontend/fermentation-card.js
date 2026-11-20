@@ -312,7 +312,9 @@ class FermentationCard extends HTMLElement {
         clip-path: inset(50%);
         white-space: nowrap;
       }
-      ha-tip { display: block; margin-top: 12px; }
+      footer { margin-top: 12px; color: var(--secondary-text-color); }
+      footer .links { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+      footer .links:not(:empty) { margin-top: 4px; }
       a { color: var(--primary-color); }
       dialog { box-sizing: border-box; width: min(360px, calc(100vw - 32px)); padding: 16px;
         border: 1px solid var(--divider-color); border-radius: 12px; color: var(--primary-text-color);
@@ -347,15 +349,15 @@ class FermentationCard extends HTMLElement {
     this.samples = node("ha-expansion-panel");
     this.sampleValues = node("div");
     this.samples.append(this.sampleValues);
-    this.details = node("ha-tip");
-    this.diagnostic = node("span");
+    const footer = node("footer");
+    this.diagnostic = node("div");
     this.editError = node("p");
     this.editError.setAttribute("role", "alert");
-    this.links = node("span");
-    this.details.append(this.diagnostic, " ", this.links);
+    this.links = node("div", null, "links");
+    footer.append(this.diagnostic, this.links);
     this.sections = node("div");
     this.sections.append(this.summary, this.graph, this.results, this.dates, this.samples,
-      this.editError, this.details);
+      this.editError, footer);
     card.append(this.picker, this.statusLabel, this.densityChange, this.message, this.sections);
     this.shadowRoot.append(style, card);
   }
@@ -752,10 +754,10 @@ class FermentationCard extends HTMLElement {
     ]);
     this.updateSection(this.links, [batch.device, batch.pill], () => [
       [batch.device, t.device], [batch.pill, t.pill],
-    ].filter(([id]) => id).flatMap(([id, label], index) => {
+    ].filter(([id]) => id).map(([id, label]) => {
       const link = node("a", label);
       link.href = `/config/devices/device/${encodeURIComponent(id)}`;
-      return index ? [" · ", link] : [link];
+      return link;
     }));
   }
 
