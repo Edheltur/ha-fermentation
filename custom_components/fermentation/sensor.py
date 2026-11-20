@@ -53,4 +53,6 @@ class BatchSensor(BatchEntity, SensorEntity):
     def extra_state_attributes(self):
         if self.role == "og":
             return {key: self.batch.values[key] for key in ("og_source", "applied_wcf")}
+        if self.role == "fg":
+            return {"fg_source": self.batch.values["fg_source"]}
         return None

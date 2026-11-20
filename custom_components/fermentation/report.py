@@ -3,7 +3,7 @@
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from .calculation import hydrometer_at_20, manual_results
+from .calculation import hydrometer_at_20
 
 
 def duration_text(seconds, russian):
@@ -55,7 +55,8 @@ _EN_MONTHS = (
 
 
 class Report:
-    def __init__(self, title, data, now, timezone, language):
+    def __init__(self, title, data, now, timezone, language, results):
+        self.values = results
         self.title = title
         self.data = data
         self.now = now
@@ -127,19 +128,26 @@ class Report:
         return lines
 
     def results(self):
-        results = manual_results(self.data)
+        results = self.values
         lines = []
         hydrometer = self.label("АС-3", "AS-3")
         for key in ("og", "fg"):
             if (value := results[key]) is None:
                 continue
             source = hydrometer
-            if key == "og" and results["og_source"] == "refractometer":
+            if results[f"{key}_source"] == "pill":
+                source = "RAPT Pill"
+            elif results[f"{key}_source"] == "refractometer":
                 source = self.label("рефрактометр", "refractometer")
-                source += f", WCF {self.decimal(results['applied_wcf'], 3)}"
+                source += f", WCF {self.decimal(self.data['wcf'], 3)}"
             lines.append(f"{key.upper()}: {self.decimal(value, 4)} SG ({source})")
         for key, label, precision, unit in (
-            ("final_abv", self.label("Алкоголь по АС-3", "AS-3 ABV"), 1, self.label("% об.", "%")),
+            (
+                "final_abv",
+                self.label("Итоговый алкоголь", "Final ABV"),
+                1,
+                self.label("% об.", "%"),
+            ),
             (
                 "refractometer_abv",
                 self.label("Алкоголь по рефрактометру", "Refractometer ABV"),

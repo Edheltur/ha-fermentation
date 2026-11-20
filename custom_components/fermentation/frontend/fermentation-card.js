@@ -18,8 +18,8 @@ const TEXT = {
     refractometer: "Рефрактометр, °Bx", ph: "pH", clear: "Очистить значение",
     confirmClear: "Очистить это значение пробы?", clearError: "Не удалось очистить значение пробы",
     outsideTable: "Вне таблицы поправок АС-3", attenuation: "Видимая степень сбраживания",
-    final_abv: "Алкоголь по АС-3", refractometer_abv: "Алкоголь по рефрактометру",
-    ogSource: "Источник OG", workingWcf: "Рабочий WCF",
+    final_abv: "Итоговый алкоголь", refractometer_abv: "Алкоголь по рефрактометру",
+    ogSource: "Источник OG", fgSource: "Источник FG", workingWcf: "Рабочий WCF",
     sampleWcf: "WCF по начальной пробе", hydrometerSource: "АС-3",
     refractometerSource: "Рефрактометр", device: "Устройство ферментации", pill: "Устройство Pill",
     pending: "Загрузка ферментаций…", save: "Сохранить", cancel: "Отмена",
@@ -42,8 +42,8 @@ const TEXT = {
     refractometer: "Refractometer, °Bx", ph: "pH", clear: "Clear value",
     confirmClear: "Clear this sample value?", clearError: "Could not clear the sample value",
     outsideTable: "Outside the AS-3 correction table", attenuation: "Apparent attenuation",
-    final_abv: "AS-3 ABV", refractometer_abv: "Refractometer ABV",
-    ogSource: "OG source", workingWcf: "Working WCF",
+    final_abv: "Final ABV", refractometer_abv: "Refractometer ABV",
+    ogSource: "OG source", fgSource: "FG source", workingWcf: "Working WCF",
     sampleWcf: "WCF from initial sample", hydrometerSource: "AS-3",
     refractometerSource: "Refractometer", device: "Fermentation device", pill: "Pill device",
     pending: "Loading fermentations…", save: "Save", cancel: "Cancel",
@@ -763,9 +763,10 @@ class FermentationCard extends HTMLElement {
 
   renderDetails(batch) {
     const { t } = this;
-    const source = this.state(batch, "og")?.attributes.og_source;
+    const sources = { hydrometer: t.hydrometerSource, refractometer: t.refractometerSource, pill: "RAPT Pill" };
     const diagnostics = [
-      [t.ogSource, { hydrometer: t.hydrometerSource, refractometer: t.refractometerSource }[source] ?? "—"],
+      [t.ogSource, sources[this.state(batch, "og")?.attributes.og_source] ?? "—"],
+      [t.fgSource, sources[this.state(batch, "fg")?.attributes.fg_source] ?? "—"],
       [t.workingWcf, this.format(batch.wcf, 3)],
       [t.sampleWcf, this.format(this.value(batch, "sample_wcf"), 3)],
     ];

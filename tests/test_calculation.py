@@ -11,18 +11,18 @@ from custom_components.fermentation.calculation import (
     WINDOW,
     brix,
     daily_delta,
-    manual_results,
+    gravity_results,
     specific_gravity,
 )
 
 
 def test_manual_provenance():
     sample = {"initial_refractometer": 12}
-    assert manual_results(sample)["og"] is None
+    assert gravity_results(sample)["og"] is None
     sample["wcf"] = 1.05
-    assert manual_results(sample)["og"] == pytest.approx(specific_gravity(12 / 1.05))
+    assert gravity_results(sample)["og"] == pytest.approx(specific_gravity(12 / 1.05))
     sample["initial_hydrometer"] = 11.5
-    result = manual_results(sample)
+    result = gravity_results(sample)
     assert result["og_source"] == "hydrometer"
     assert result["applied_wcf"] is None
     assert result["sample_wcf"] == pytest.approx(1.043478, abs=1e-6)
@@ -30,7 +30,7 @@ def test_manual_provenance():
 
 
 def test_final_results():
-    result = manual_results({"initial_hydrometer": brix(1.050), "final_hydrometer": brix(1.010)})
+    result = gravity_results({"initial_hydrometer": brix(1.050), "final_hydrometer": brix(1.010)})
     assert result["final_abv"] == pytest.approx(5.25)
     assert result["attenuation"] == pytest.approx(80)
 
@@ -69,7 +69,7 @@ def test_temperature_correction(reading, temperature, expected):
         "initial_refractometer": 14,
         "wcf": 1,
     }
-    result = manual_results(data)
+    result = gravity_results(data)
     if expected is None:
         assert result["fg"] is None
         assert result["sample_wcf"] is None
@@ -82,7 +82,7 @@ def test_temperature_correction(reading, temperature, expected):
 
 @pytest.mark.parametrize("field", ["initial_hydrometer", "initial_refractometer"])
 def test_zero_initial_extract_has_no_attenuation(field):
-    result = manual_results({field: 0, "wcf": 1.04, "final_hydrometer": -0.1})
+    result = gravity_results({field: 0, "wcf": 1.04, "final_hydrometer": -0.1})
     assert result["og"] is not None
     assert result["attenuation"] is None
 
@@ -113,10 +113,25 @@ def test_working_wcf_changes_optical_abv_only_when_hydrometer_controls_og():
         "initial_refractometer": 12.5,
         "final_refractometer": 6,
     }
-    a = manual_results({**readings, "wcf": 1.04})
-    b = manual_results({**readings, "wcf": 1.05})
-    without_wcf = manual_results(readings)
+    a = gravity_results({**readings, "wcf": 1.04})
+    b = gravity_results({**readings, "wcf": 1.05})
+    without_wcf = gravity_results(readings)
     assert a["og"] == b["og"] == without_wcf["og"]
     assert a["final_abv"] == b["final_abv"] == without_wcf["final_abv"]
     assert a["refractometer_abv"] != b["refractometer_abv"]
     assert without_wcf["refractometer_abv"] is None
+
+
+def test_pill_only_and_manual_priority():
+    data = {}
+    results = gravity_results(data, 1.05, 1.01)
+    assert results["og_source"] == results["fg_source"] == "pill"
+    assert results["final_abv"] == pytest.approx(5.25)
+    assert results["attenuation"] == pytest.approx(80)
+    data.update(initial_refractometer=12, final_refractometer=5, wcf=1.04)
+    results = gravity_results(data, 1.05, 1.01)
+    assert results["og_source"] == results["fg_source"] == "refractometer"
+    assert results["fg"] == pytest.approx(1 - 0.00085683 * 12 / 1.04 + 0.0034941 * 5 / 1.04)
+    data.update(initial_hydrometer=12, final_hydrometer=3)
+    results = gravity_results(data, 1.05, 1.01)
+    assert results["og_source"] == results["fg_source"] == "hydrometer"

@@ -333,3 +333,36 @@ async def test_dashboard_resolves_renamed_entities_and_filters_permissions(hass)
     assert result["batches"][0]["roles"] == {"brix": new_id}
     assert result["batches"][0]["pill"] is None
     assert second.unique_id != first.unique_id
+
+
+async def test_pill_windows_survive_retention_and_reload(hass):
+    device = await pill(hass)
+    registry = er.async_get(hass)
+    registry.async_get_or_create("sensor", "rapt_ble", "pill-specific_gravity", device_id=device.id)
+    entry = (await create(hass, device.id))["result"]
+    batch = entry.runtime_data
+    end = int(dt_util.utcnow().timestamp() // 60) * 60 - 2 * 86400
+    start = end - 14 * 86400
+    batch.set_field("start", start)
+    batch.set_field("end", end)
+    initial = start + 30 * 60
+    final = end - 40 * 60
+    batch.points = [
+        (initial - 60, 1.3),
+        (initial, 1.06),
+        (initial + 540, 1.04),
+        (initial + 600, 1.3),
+        (final, 1.01),
+        (final + 600, 1.3),
+    ]
+    await hass.config_entries.async_reload(entry.entry_id)
+    batch = entry.runtime_data
+    assert batch.values["og"] == pytest.approx(1.05)
+    assert batch.values["fg"] == pytest.approx(1.01)
+    assert len(batch.points) == 3
+    batch.set_field("initial_hydrometer", 12)
+    assert batch.values["og_source"] == "hydrometer"
+    batch.set_field("initial_hydrometer", None)
+    assert batch.values["og_source"] == "pill"
+    batch.set_field("end", end + 3600)
+    assert batch.values["fg"] is None

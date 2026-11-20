@@ -77,7 +77,7 @@
         "name": "Initial sample WCF"
       },
       "final_abv": {
-        "name": "Alcohol by hydrometer"
+        "name": "Final ABV"
       },
       "attenuation": {
         "name": "Apparent attenuation"
