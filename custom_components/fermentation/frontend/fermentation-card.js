@@ -120,11 +120,6 @@ function chartSeriesName(t, role) {
   return role === "abv" ? t.chartAbv : t[role];
 }
 
-function chartHeight() {
-  // ApexCharts expects a numeric height in pixels.
-  return Math.max(MIN_CHART_HEIGHT, Math.ceil(window.innerHeight / 2));
-}
-
 function minimumAxisBounds({ role, points }) {
   let low = Infinity;
   let high = -Infinity;
@@ -142,7 +137,7 @@ function minimumAxisBounds({ role, points }) {
   return { min, max: Math.max(min + span, Math.ceil(high / step) * step) };
 }
 
-function chartConfig(series, start, end, t, locale, timeZone, period, active) {
+function chartConfig(series, start, end, t, locale, timeZone, period, active, height) {
   // Anchor span.offset to a calendar boundary so a finished chart does not drift.
   const base = new Date(new Date().getFullYear(), 0, 1).getTime();
   const offset = start - base;
@@ -173,7 +168,7 @@ function chartConfig(series, start, end, t, locale, timeZone, period, active) {
     apex_config: {
       stroke: { lineCap: "round" },
       chart: {
-        height: chartHeight(), toolbar: { show: false }, zoom: { enabled: false }, animations: { enabled: false },
+        height, toolbar: { show: false }, zoom: { enabled: false }, animations: { enabled: false },
         events: {
           updated: `EVAL:function(chart) {
             chart.el.dispatchEvent(new CustomEvent("fermentation-chart-ready", {
@@ -261,6 +256,11 @@ class FermentationCard extends HTMLElement {
       .metric { display: grid; gap: 4px; align-content: start; padding: 8px 6px; text-align: center;
         background: var(--secondary-background-color); border-radius: 8px; overflow-wrap: anywhere; }
       .metric strong { font-size: 1.05rem; }
+      .chart-frame, .batches-pending { height: max(${MIN_CHART_HEIGHT}px, 50vh); }
+      .batches-pending { display: grid; place-items: center; }
+      .chart-frame { position: relative; }
+      .chart-frame:has(.history-status:not(:empty)) .chart { visibility: hidden; }
+      .history-status:not(:empty) { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; margin: 0; }
       .chart { min-width: 0; margin-inline: -14px; }
       .dates {
         display: grid;
@@ -340,10 +340,14 @@ class FermentationCard extends HTMLElement {
       this.period = value === "all" ? null : Number(value);
       this.render();
     });
-    this.historyMessage = node("p", null, "muted");
+    this.historyMessage = node("div", null, "history-status muted");
+    this.historySpinner = node("ha-spinner");
+    this.historySpinner.size = "small";
     this.historyMessage.setAttribute("role", "status");
     this.chart = node("div", null, "chart");
-    this.graph.append(this.periodControl, this.historyMessage, this.chart);
+    this.chartFrame = node("div", null, "chart-frame");
+    this.chartFrame.append(this.chart, this.historyMessage);
+    this.graph.append(this.periodControl, this.chartFrame);
     this.results = node("section", null, "metrics");
     this.dates = node("section", null, "dates");
     this.samples = node("ha-expansion-panel");
@@ -540,6 +544,7 @@ class FermentationCard extends HTMLElement {
     this.message.textContent = this.batchesError ? t.error
       : !this.coverage ? t.pending : this.batches.length ? "" : t.empty;
     this.message.hidden = !this.message.textContent;
+    this.message.classList.toggle("batches-pending", !this.coverage && !this.batchesError);
     this.sections.hidden = !batch;
     if (!batch) {
       this.pendingChart = null;
@@ -762,18 +767,18 @@ class FermentationCard extends HTMLElement {
   }
 
   resizeChart = () => {
-    const height = chartHeight();
-    if (this.apexChart && this.chartHeight !== height) {
+    const height = this.chartFrame.clientHeight;
+    if (height && this.apexChart && this.chartHeight !== height) {
       this.chartHeight = height;
       this.apexChart.updateOptions({ chart: { height } }, false, false);
     }
   };
 
   mountChart(series, start, end) {
-    this.chartHeight = chartHeight();
+    this.chartHeight = this.chartFrame.clientHeight || MIN_CHART_HEIGHT;
     const apex = document.createElement("apexcharts-card");
     apex.setConfig(chartConfig(series, start, end, this.t, this.locale,
-      this._hass.config.time_zone, this.period, this.chartStatus === "active"));
+      this._hass.config.time_zone, this.period, this.chartStatus === "active", this.chartHeight));
     const states = { ...this._hass.states };
     for (const { entity, points } of series) {
       states[entity] = { ...states[entity],
@@ -782,6 +787,7 @@ class FermentationCard extends HTMLElement {
     apex.hass = { ...this._hass, states, locale: { ...this._hass.locale, time_zone: "local" } };
     apex.addEventListener("fermentation-chart-ready", ({ detail }) => {
       if (this.chart.firstChild !== apex) return;
+      this.historyMessage.replaceChildren();
       this.apexChart = detail;
       this.resizeChart();
     }, { once: true });
@@ -827,10 +833,12 @@ class FermentationCard extends HTMLElement {
     if (key !== this.chartKey) {
       this.historySnapshot = null;
       this.clearChart();
-      this.historyMessage.textContent = this.t.loading;
+      this.historySpinner.setAttribute("aria-label", this.t.loading);
+      this.historyMessage.replaceChildren(this.historySpinner);
     }
     this.chartKey = key;
     if (!customElements.get("apexcharts-card")) {
+      this.pendingChart = null;
       this.historyMessage.textContent = this.t.apex;
       return;
     }
@@ -859,7 +867,7 @@ class FermentationCard extends HTMLElement {
         this.mountChart(result.series, start, end);
         this.chartSeries = chartSeries;
       }
-      if (this.pendingChart === request) this.historyMessage.textContent = "";
+      if (this.pendingChart === request && this.apexChart) this.historyMessage.replaceChildren();
     } catch {
       if (this.pendingChart !== request) return;
       this.chartKey = null;
