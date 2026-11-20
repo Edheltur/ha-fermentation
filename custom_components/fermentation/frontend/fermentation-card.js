@@ -530,10 +530,14 @@ class FermentationCard extends HTMLElement {
     this.updateSection(this.dates, [dates, this._hass.config.time_zone], () => dates.map(
       ([title, value, prompt, id, disabled]) => {
         const cell = node("div");
-        cell.append(node("small", title), button(
-          value == null ? prompt : this.formatDate(value, true),
-          () => value == null ? this.setInitialDate(id, prompt) : this.moreInfo(id), !id || disabled,
-        ));
+        const label = value == null ? prompt : this.formatDate(value, true);
+        const control = node("ha-button", label);
+        control.appearance = "outlined";
+        control.variant = "neutral";
+        control.disabled = !id || disabled;
+        control.setAttribute("aria-label", value == null ? label : `${title}, ${label}`);
+        control.addEventListener("click", () => value == null ? this.setInitialDate(id, prompt) : this.moreInfo(id));
+        cell.append(node("small", title), control);
         return cell;
       },
     ));
