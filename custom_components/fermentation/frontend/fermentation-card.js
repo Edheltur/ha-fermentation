@@ -71,30 +71,28 @@ function button(text, action, disabled = false) {
   return el;
 }
 
-function durationText(seconds, russian) {
-  const days = Math.floor(seconds / 86400);
-  const hours = Math.floor(seconds / 3600) % 24;
-  const dayWord = russian
-    ? new Intl.PluralRules("ru").select(days)
-    : days === 1 ? "one" : "other";
-  const labels = russian ? { one: "день", few: "дня", many: "дней" } : { one: "day", other: "days" };
+function durationText(seconds, locale, style = "long") {
+  const totalHours = Math.max(0, Math.floor(seconds / 3600));
+  const days = Math.floor(totalHours / 24);
+  const hours = totalHours % 24;
+  if (Intl.DurationFormat) {
+    return new Intl.DurationFormat(locale, { style, hoursDisplay: days ? "auto" : "always" })
+      .format({ days, hours });
+  }
+
+  const unitText = (value, unit) => new Intl.NumberFormat(locale, {
+    style: "unit", unit, unitDisplay: style,
+  }).format(value);
   const parts = [];
-  if (days) parts.push(`${days} ${labels[dayWord]}`);
-  if (hours || !days) parts.push(russian ? `${hours}ч` : `${hours} h`);
-  return parts.join(" ");
+  if (days) parts.push(unitText(days, "day"));
+  if (hours || !days) parts.push(unitText(hours, "hour"));
+  return new Intl.ListFormat(locale, { style, type: "unit" }).format(parts);
 }
 
-function fermentationStatus(batch, status, now, t, russian) {
+function fermentationStatus(batch, status, now, t, locale) {
   if (status === "scheduled") return t.scheduled;
 
-  const compact = (seconds) => {
-    const totalHours = Math.max(0, Math.floor(seconds / 3600));
-    const days = Math.floor(totalHours / 24);
-    const hours = totalHours % 24;
-    const dayText = days ? `${days}${russian ? "д" : "d"}` : "";
-    const hourText = hours || !days ? `${hours}${russian ? "ч" : "h"}` : "";
-    return dayText + hourText;
-  };
+  const compact = (seconds) => durationText(seconds, locale, "narrow");
   if (status === "finished") return t.finished(compact(batch.end - batch.start));
 
   const elapsed = t.active(compact(now - batch.start));
@@ -109,14 +107,18 @@ function chartConfig(series, start, end, t, locale, timeZone, period, active) {
   // Anchor span.offset to a calendar boundary so a finished chart does not drift.
   const base = new Date(new Date().getFullYear(), 0, 1).getTime();
   const offset = start - base;
-  const dateFormatter = (options) => `EVAL:function(value) {
-    return new Intl.DateTimeFormat(${JSON.stringify(locale)}, ${JSON.stringify({ timeZone, ...options })})
-      .format(Number(value));
-  }`;
+  // ApexCharts Card serializes its configuration and evaluates EVAL formatters after loading it.
+  const dateFormat = (options) => `new Intl.DateTimeFormat(${JSON.stringify(locale)},
+    ${JSON.stringify({ timeZone, ...options })}).format`;
+  const numberOptions = (precision) => ({
+    minimumFractionDigits: precision, maximumFractionDigits: precision,
+  });
+  const numberFormat = (precision) => `new Intl.NumberFormat(${JSON.stringify(locale)},
+    ${JSON.stringify(numberOptions(precision))}).format`;
   const date = { day: "numeric", month: "short" };
   const time = { hour: "2-digit", minute: "2-digit" };
-  const axisDate = dateFormatter(period === 1 ? time : date);
-  const seriesUnits = series.map(({ unit, precision }) => ({ unit, precision }));
+  const seriesUnits = series.map(({ unit }) => unit);
+  const seriesNumberOptions = series.map(({ precision }) => numberOptions(precision));
   return {
     type: "custom:apexcharts-card",
     graph_span: `${end - start}ms`,
@@ -141,35 +143,36 @@ function chartConfig(series, start, end, t, locale, timeZone, period, active) {
       yaxis: series.map(({ role, color, precision }) => ({
         seriesName: chartSeriesName(t, role), opposite: role !== "brix",
         showAlways: false, decimalsInFloat: precision, tickAmount: 4,
-        labels: { style: { colors: color } },
+        labels: {
+          style: { colors: color },
+          formatter: `EVAL:${numberFormat(precision)}`,
+        },
       })),
       legend: {
         show: true, position: "bottom", onItemClick: { toggleDataSeries: true },
         formatter: `EVAL:function(name, { seriesIndex, w }) {
-          const { unit, precision } = ${JSON.stringify(seriesUnits)}[seriesIndex];
+          const unit = ${JSON.stringify(seriesUnits)}[seriesIndex];
           const point = w.config.series[seriesIndex]?.data?.at(-1);
           const value = Array.isArray(point) ? point[1] : point?.y;
           if (!${active}) return name + ' · ' + unit;
+          const options = ${JSON.stringify(seriesNumberOptions)}[seriesIndex];
           const formatted = Number.isFinite(value)
-            ? new Intl.NumberFormat(${JSON.stringify(locale)}, { maximumFractionDigits: precision,
-                minimumFractionDigits: precision }).format(value)
-            : '—';
+            ? new Intl.NumberFormat(${JSON.stringify(locale)}, options).format(value) : '—';
           return name + ': ' + formatted + ' ' + unit;
         }`,
       },
       xaxis: { labels: { rotate: 0, showDuplicates: false, hideOverlappingLabels: true,
         formatter: `EVAL:function(_value, timestamp) {
-          const format = ${axisDate.slice(5)};
+          const format = ${dateFormat(period === 1 ? time : date)};
           return Number.isFinite(timestamp) ? format(timestamp) : '';
         }` } },
       tooltip: {
         shared: true, intersect: false, hideEmptySeries: false,
-        x: { formatter: dateFormatter({ ...date, ...time }) },
+        x: { formatter: `EVAL:${dateFormat({ ...date, ...time })}` },
         y: series.map(({ unit, precision }) => ({
           formatter: `EVAL:function(value) {
             return Number.isFinite(value)
-              ? new Intl.NumberFormat(${JSON.stringify(locale)}, { minimumFractionDigits: ${precision},
-                  maximumFractionDigits: ${precision} }).format(value) + ${JSON.stringify(` ${unit}`)}
+              ? (${numberFormat(precision)})(value) + ${JSON.stringify(` ${unit}`)}
               : '—';
           }`,
         })),
@@ -403,7 +406,7 @@ class FermentationCard extends HTMLElement {
     const now = Date.now();
     const status = batch && batchStatus(batch, now);
     this.statusLabel.textContent = status
-      ? fermentationStatus(batch, status, now / 1000, t, this.russian) : "";
+      ? fermentationStatus(batch, status, now / 1000, t, this.locale) : "";
     this.statusLabel.hidden = !status;
     this.picker.hidden = !this.batches.length;
     this.picker.setAttribute("aria-label", t.choose);
@@ -450,7 +453,7 @@ class FermentationCard extends HTMLElement {
     const duration = number(durationState?.state);
     const factor = units[durationState?.attributes.unit_of_measurement];
     const elapsed = duration === null || factor === undefined
-      ? "—" : durationText(Math.round(duration * factor), this.russian);
+      ? "—" : durationText(Math.round(duration * factor), this.locale);
     const telemetry = status === "active"
       ? [[t.duration, elapsed],
         [t.delta, this.format(this.value(batch, "delta"), 2, "°Bx", "exceptZero")],
@@ -476,7 +479,7 @@ class FermentationCard extends HTMLElement {
   renderControls(status) {
     this.graph.hidden = status === "scheduled";
     this.updateSection(this.controls, this.period, () => PERIODS.map((days) => {
-      const label = days == null ? this.t.all : durationText(days * 86400, this.russian);
+      const label = days == null ? this.t.all : durationText(days * 86400, this.locale);
       const el = button(label, () => {
         this.period = days;
         this.render();
