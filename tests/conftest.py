@@ -2,9 +2,10 @@
 
 from collections.abc import AsyncIterator
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
-from homeassistant import bootstrap, loader
+from homeassistant import auth, bootstrap, loader
 from homeassistant.config_entries import ConfigEntries
 from homeassistant.core import HomeAssistant
 
@@ -20,6 +21,8 @@ async def hass(tmp_path: Path) -> AsyncIterator[HomeAssistant]:
         hass.config_entries = ConfigEntries(hass, {})
         await loader.async_get_custom_components(hass)
         assert await bootstrap.async_load_base_functionality(hass)
-        yield hass
+        hass.auth = await auth.auth_manager_from_config(hass, [], [])
+        with patch("homeassistant.components.http.async_get_source_ip", return_value="127.0.0.1"):
+            yield hass
     finally:
         await hass.async_stop()

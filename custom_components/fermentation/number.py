@@ -2,6 +2,7 @@
 
 from homeassistant.components.number import NumberEntity, NumberMode
 
+from .calculation import hydrometer_at_20
 from .const import SAMPLES
 from .entity import BatchEntity
 
@@ -33,3 +34,15 @@ class SampleField(BatchEntity, NumberEntity):
 
     async def async_set_native_value(self, value):
         self.batch.set_field(self.role, value)
+
+    async def async_clear_sample(self):
+        self.batch.set_field(self.role, None)
+
+    @property
+    def extra_state_attributes(self):
+        stage, key = self.role.split("_", 1)
+        if key == "hydrometer" and self.native_value is not None:
+            temperature = self.batch.data.get(f"{stage}_sample_temperature")
+            if hydrometer_at_20(self.native_value, temperature) is None:
+                return {"outside_correction_table": True}
+        return None

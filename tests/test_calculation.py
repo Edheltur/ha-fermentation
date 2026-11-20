@@ -1,9 +1,13 @@
 """Acceptance examples for manual readings and the minute window."""
 
+from math import inf, nextafter
+
 import pytest
 
 from custom_components.fermentation.calculation import (
     DAY,
+    SG_MAX,
+    SG_MIN,
     WINDOW,
     brix,
     daily_delta,
@@ -81,3 +85,38 @@ def test_zero_initial_extract_has_no_attenuation(field):
     result = manual_results({field: 0, "wcf": 1.04, "final_hydrometer": -0.1})
     assert result["og"] is not None
     assert result["attenuation"] is None
+
+
+def test_analytical_inverse_across_sg_range():
+    minimum, maximum = brix(SG_MIN), brix(SG_MAX)
+    assert specific_gravity(minimum) == SG_MIN
+    assert specific_gravity(maximum) == SG_MAX
+    assert specific_gravity(nextafter(minimum, -inf)) is None
+    assert specific_gravity(nextafter(maximum, inf)) is None
+    for invalid in (float("nan"), -inf, inf):
+        assert specific_gravity(invalid) is None
+    assert f"{specific_gravity(3):.4f}" == "1.0117"
+    assert f"{specific_gravity(12):.4f}" == "1.0484"
+    assert (
+        max(
+            abs(specific_gravity(brix(sg)) - sg)
+            for sg in (index / 100_000 for index in range(80_000, 150_001))
+        )
+        < 1e-14
+    )
+
+
+def test_working_wcf_changes_optical_abv_only_when_hydrometer_controls_og():
+    readings = {
+        "initial_hydrometer": 12,
+        "final_hydrometer": 3,
+        "initial_refractometer": 12.5,
+        "final_refractometer": 6,
+    }
+    a = manual_results({**readings, "wcf": 1.04})
+    b = manual_results({**readings, "wcf": 1.05})
+    without_wcf = manual_results(readings)
+    assert a["og"] == b["og"] == without_wcf["og"]
+    assert a["final_abv"] == b["final_abv"] == without_wcf["final_abv"]
+    assert a["refractometer_abv"] != b["refractometer_abv"]
+    assert without_wcf["refractometer_abv"] is None

@@ -13,7 +13,7 @@
           "pill": "Device from RAPT Bluetooth with a specific gravity sensor.",
           "name": "Shown on the batch device.",
           "description": "Optional batch notes, such as the yeast strain.",
-          "wcf": "Correction for initial refractometer readings. Leave empty if unknown."
+          "wcf": "Refractometer wort correction factor. Used for refractometer OG and for ABV from two optical readings. Optional."
         }
       },
       "reconfigure": {
@@ -26,7 +26,7 @@
         "data_description": {
           "name": "Shown on the batch device.",
           "description": "Optional batch notes, such as the yeast strain.",
-          "wcf": "Correction for initial refractometer readings. Leave empty if unknown."
+          "wcf": "Refractometer wort correction factor. Used for refractometer OG and for ABV from two optical readings. Optional."
         }
       },
       "sources": {
@@ -132,6 +132,32 @@
     },
     "invalid_interval": {
       "message": "Set the start before the bottling date."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Fermentation",
+        "menu_options": {
+          "report": "Report"
+        }
+      },
+      "report": {
+        "title": "Report",
+        "description": "Copy the text and close the form.",
+        "data": {
+          "report": "Report text"
+        }
+      }
+    },
+    "abort": {
+      "report_closed": "Report closed."
+    }
+  },
+  "services": {
+    "clear_sample": {
+      "name": "Clear sample value",
+      "description": "Removes the saved value of the selected manual sample field."
     }
   }
 }

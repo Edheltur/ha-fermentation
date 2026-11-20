@@ -3,12 +3,14 @@
 from uuid import uuid4
 
 import probatio as vol
-from homeassistant.config_entries import ConfigFlow
+from homeassistant.config_entries import ConfigFlow, OptionsFlow
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import selector as sel
+from homeassistant.util import dt as dt_util
 
 from .calculation import numeric
 from .const import DOMAIN
+from .report import Report
 
 METADATA = {
     vol.Required("name"): str,
@@ -41,6 +43,10 @@ def metadata_errors(data):
 
 class FermentationFlow(ConfigFlow, domain=DOMAIN):
     VERSION = 1
+
+    @staticmethod
+    def async_get_options_flow(config_entry):
+        return FermentationOptionsFlow()
 
     async def async_step_user(self, user_input=None):
         errors = {}
@@ -126,5 +132,31 @@ class FermentationFlow(ConfigFlow, domain=DOMAIN):
                         if entry.data.get(k) is not None
                     },
                 },
+            ),
+        )
+
+
+class FermentationOptionsFlow(OptionsFlow):
+    async def async_step_init(self, user_input=None):
+        return self.async_show_menu(step_id="init", menu_options=["report"])
+
+    async def async_step_report(self, user_input=None):
+        if user_input is not None:
+            # Closing the form must not overwrite the config entry's options.
+            return self.async_abort(reason="report_closed")
+        entry = self.config_entry
+        config = self.hass.config
+        report = Report(
+            entry.title,
+            entry.data,
+            dt_util.utcnow().timestamp(),
+            config.time_zone,
+            config.language,
+        ).render()
+        return self.async_show_form(
+            step_id="report",
+            data_schema=self.add_suggested_values_to_schema(
+                vol.Schema({vol.Optional("report"): sel.TextSelector({"multiline": True})}),
+                {"report": report},
             ),
         )
