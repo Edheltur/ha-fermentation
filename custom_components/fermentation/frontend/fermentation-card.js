@@ -241,7 +241,6 @@ class FermentationCard extends HTMLElement {
     super();
     this.attachShadow({ mode: "open" });
     this.batches = [];
-    this.period = 3;
     const style = node("style");
     style.textContent = `
       :host { display: block; min-width: 0; }
@@ -568,7 +567,7 @@ class FermentationCard extends HTMLElement {
       return;
     }
     if (status !== this.chartStatus) {
-      this.period = status === "finished" ? null : 3;
+      this.period = status === "finished" ? null : 1;
       if (!this.chartStatus || status === "finished") this.samples.expanded = status !== "active";
       this.chartStatus = status;
       this.chartKey = null;
