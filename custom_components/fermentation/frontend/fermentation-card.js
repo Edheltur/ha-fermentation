@@ -7,7 +7,7 @@ const TEXT = {
     finished: (elapsed) => `Брожение завершено за ${elapsed}`,
     remaining: (left) => `осталось ${left}`,
     choose: "Выберите ферментацию", empty: "Нет доступных ферментаций",
-    duration: "Длительность", delta: "∆ за 24 ч", abv: "Алкоголь по Pill",
+    delta: "Изменение плотности за 24 часа",
     brix: "Плотность", temperature: "Температура", chartAbv: "Алкоголь",
     all: "Вся", loading: "Загрузка истории…",
     noHistory: "Нет записанной истории", hourly: "Средние за час",
@@ -31,7 +31,7 @@ const TEXT = {
     finished: (elapsed) => `Fermentation completed in ${elapsed}`,
     remaining: (left) => `${left} left`,
     choose: "Select a fermentation", empty: "No available fermentations",
-    duration: "Duration", delta: "24 h change", abv: "Pill ABV",
+    delta: "Gravity change over 24 hours",
     brix: "Gravity", temperature: "Temperature", chartAbv: "ABV",
     all: "All", loading: "Loading history…",
     noHistory: "No recorded history", hourly: "Hourly averages",
@@ -54,6 +54,7 @@ const TEXT = {
 const PROBES = ["hydrometer", "sample_temperature", "refractometer", "ph"];
 const PERIODS = [1, 3, 10, null];
 const REFRESH = 60_000;
+const MIN_CHART_HEIGHT = 260;
 const ABV_RU = "% об.";
 
 function node(tag, text = null, className = "") {
@@ -92,7 +93,7 @@ function durationText(seconds, locale, style = "long") {
 function fermentationStatus(batch, status, now, t, locale) {
   if (status === "scheduled") return t.scheduled;
 
-  const compact = (seconds) => durationText(seconds, locale, "narrow");
+  const compact = (seconds) => durationText(seconds, locale, "narrow").replace("д.", "д");
   if (status === "finished") return t.finished(compact(batch.end - batch.start));
 
   const elapsed = t.active(compact(now - batch.start));
@@ -101,6 +102,11 @@ function fermentationStatus(batch, status, now, t, locale) {
 
 function chartSeriesName(t, role) {
   return role === "abv" ? t.chartAbv : t[role];
+}
+
+function chartHeight() {
+  // ApexCharts expects a numeric height in pixels.
+  return Math.max(MIN_CHART_HEIGHT, Math.ceil(window.innerHeight / 2));
 }
 
 function chartConfig(series, start, end, t, locale, timeZone, period, active) {
@@ -113,10 +119,12 @@ function chartConfig(series, start, end, t, locale, timeZone, period, active) {
   const numberOptions = (precision) => ({
     minimumFractionDigits: precision, maximumFractionDigits: precision,
   });
-  const numberFormat = (precision) => `new Intl.NumberFormat(${JSON.stringify(locale)},
-    ${JSON.stringify(numberOptions(precision))}).format`;
+  const numberFormat = (precision, options = numberOptions(precision)) => `new Intl.NumberFormat(${JSON.stringify(locale)},
+    ${JSON.stringify(options)}).format`;
   const date = { day: "numeric", month: "short" };
   const time = { hour: "2-digit", minute: "2-digit" };
+  // Keep the end labels inside the chart even when all Y axes are hidden.
+  const axisPadding = 17;
   const seriesUnits = series.map(({ unit }) => unit);
   const seriesNumberOptions = series.map(({ precision }) => numberOptions(precision));
   return {
@@ -131,7 +139,7 @@ function chartConfig(series, start, end, t, locale, timeZone, period, active) {
     })),
     apex_config: {
       chart: {
-        height: 260, toolbar: { show: false }, zoom: { enabled: false }, animations: { enabled: false },
+        height: chartHeight(), toolbar: { show: false }, zoom: { enabled: false }, animations: { enabled: false },
         events: {
           updated: `EVAL:function(chart) {
             chart.el.dispatchEvent(new CustomEvent("fermentation-chart-ready", {
@@ -140,12 +148,13 @@ function chartConfig(series, start, end, t, locale, timeZone, period, active) {
           }`,
         },
       },
+      grid: { padding: { left: axisPadding, right: axisPadding } },
       yaxis: series.map(({ role, color, precision }) => ({
         seriesName: chartSeriesName(t, role), opposite: role !== "brix",
         showAlways: false, decimalsInFloat: precision, tickAmount: 4,
         labels: {
           style: { colors: color },
-          formatter: `EVAL:${numberFormat(precision)}`,
+          formatter: `EVAL:${numberFormat(precision, { maximumFractionDigits: precision })}`,
         },
       })),
       legend: {
@@ -163,7 +172,7 @@ function chartConfig(series, start, end, t, locale, timeZone, period, active) {
       },
       xaxis: { labels: { rotate: 0, showDuplicates: false, hideOverlappingLabels: true,
         formatter: `EVAL:function(_value, timestamp) {
-          const format = ${dateFormat(period === 1 ? time : date)};
+          const format = ${dateFormat(period === 1 ? time : { ...date, month: "numeric" })};
           return Number.isFinite(timestamp) ? format(timestamp) : '';
         }` } },
       tooltip: {
@@ -206,7 +215,7 @@ class FermentationCard extends HTMLElement {
         background: var(--secondary-background-color); border-radius: 8px; overflow-wrap: anywhere; }
       .metric strong { font-size: 1.05rem; }
       .controls { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
-      .chart { min-width: 0; }
+      .chart { min-width: 0; margin-inline: -14px; }
       .chart > apexcharts-card { --ha-card-border-width: 0; --ha-card-box-shadow: none; }
       .dates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin: 12px 0; }
       .dates div { display: grid; gap: 4px; }
@@ -230,6 +239,7 @@ class FermentationCard extends HTMLElement {
     `;
     const card = node("ha-card");
     this.statusLabel = node("p", null, "muted");
+    this.densityChange = node("p", null, "muted");
     this.picker = node("select");
     this.picker.addEventListener("change", () => this.selectBatch(this.picker.value));
     this.message = node("p", null, "muted");
@@ -256,7 +266,7 @@ class FermentationCard extends HTMLElement {
     this.sections = node("div");
     this.sections.append(this.summary, this.graph, this.results, this.dates, this.samples,
       this.editError, this.details, this.links);
-    card.append(this.picker, this.statusLabel, this.message, this.sections);
+    card.append(this.picker, this.statusLabel, this.densityChange, this.message, this.sections);
     this.shadowRoot.append(style, card);
   }
 
@@ -265,6 +275,7 @@ class FermentationCard extends HTMLElement {
   getCardSize() { return 7; }
 
   connectedCallback() {
+    window.addEventListener("resize", this.resizeChart);
     this.watchConnection();
     this.refreshBatches();
     this.timer = setInterval(async () => {
@@ -275,6 +286,7 @@ class FermentationCard extends HTMLElement {
   }
 
   disconnectedCallback() {
+    window.removeEventListener("resize", this.resizeChart);
     clearInterval(this.timer);
     clearTimeout(this.registryTimer);
     this.watchConnection(null);
@@ -408,6 +420,10 @@ class FermentationCard extends HTMLElement {
     this.statusLabel.textContent = status
       ? fermentationStatus(batch, status, now / 1000, t, this.locale) : "";
     this.statusLabel.hidden = !status;
+    const delta = status === "active" ? this.value(batch, "delta") : null;
+    this.densityChange.hidden = delta === null;
+    this.densityChange.textContent = delta === null
+      ? "" : `${t.delta}: ${this.format(delta, 2, "°Bx", "exceptZero")}`;
     this.picker.hidden = !this.batches.length;
     this.picker.setAttribute("aria-label", t.choose);
     const choices = this.batches.map((entry) => this.currentDates(entry));
@@ -448,18 +464,10 @@ class FermentationCard extends HTMLElement {
   renderSummary(batch, status) {
     const { t } = this;
     const sg = (role) => this.format(this.value(batch, role), 4, "SG");
-    const durationState = this.state(batch, "duration");
-    const units = { d: 86400, h: 3600, min: 60, s: 1, ms: 0.001 };
-    const duration = number(durationState?.state);
-    const factor = units[durationState?.attributes.unit_of_measurement];
-    const elapsed = duration === null || factor === undefined
-      ? "—" : durationText(Math.round(duration * factor), this.locale);
     const telemetry = status === "active"
-      ? [[t.duration, elapsed],
-        [t.delta, this.format(this.value(batch, "delta"), 2, "°Bx", "exceptZero")],
-        [t.abv, this.format(this.value(batch, "abv"), 1, this.abvUnit)]]
+      ? []
       : status === "finished"
-        ? [[t.duration, elapsed], ["OG", sg("og")], ["FG", sg("fg")]]
+        ? [["OG", sg("og")], ["FG", sg("fg")]]
         : [["OG", sg("og")]];
     const results = status === "finished"
       ? [[t.attenuation, this.format(this.value(batch, "attenuation"), 0, "%")],
@@ -471,6 +479,7 @@ class FermentationCard extends HTMLElement {
       box.append(node("small", label), node("strong", value));
       return box;
     });
+    this.summary.hidden = !telemetry.length;
     this.updateSection(this.summary, telemetry, () => tiles(telemetry));
     this.updateSection(this.results, results, () => tiles(results));
     this.results.hidden = !results.length;
@@ -635,7 +644,16 @@ class FermentationCard extends HTMLElement {
     }));
   }
 
+  resizeChart = () => {
+    const height = chartHeight();
+    if (this.apexChart && this.chartHeight !== height) {
+      this.chartHeight = height;
+      this.apexChart.updateOptions({ chart: { height } }, false, false);
+    }
+  };
+
   mountChart(series, start, end) {
+    this.chartHeight = chartHeight();
     const apex = document.createElement("apexcharts-card");
     apex.setConfig(chartConfig(series, start, end, this.t, this.locale,
       this._hass.config.time_zone, this.period, this.chartStatus === "active"));
@@ -646,7 +664,9 @@ class FermentationCard extends HTMLElement {
     }
     apex.hass = { ...this._hass, states, locale: { ...this._hass.locale, time_zone: "local" } };
     apex.addEventListener("fermentation-chart-ready", ({ detail }) => {
-      if (this.chart.firstChild === apex) this.apexChart = detail;
+      if (this.chart.firstChild !== apex) return;
+      this.apexChart = detail;
+      this.resizeChart();
     }, { once: true });
     this.chart.replaceChildren(apex);
   }
