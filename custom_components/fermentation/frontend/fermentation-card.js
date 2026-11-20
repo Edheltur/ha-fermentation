@@ -156,7 +156,7 @@ function chartConfig(series, start, end, t, locale, timeZone, period, active) {
         seriesName: chartSeriesName(t, role), opposite: role !== "brix",
         showAlways: false, decimalsInFloat: precision, tickAmount: 4,
         labels: {
-          style: { colors: `color-mix(in srgb, var(--primary-text-color) 55%, ${color})` },
+          style: { colors: color },
           formatter: `EVAL:${numberFormat(precision, { maximumFractionDigits: precision })}`,
         },
       })),
