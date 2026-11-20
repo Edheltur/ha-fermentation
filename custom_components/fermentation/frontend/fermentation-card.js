@@ -148,12 +148,15 @@ function chartConfig(series, start, end, t, locale, timeZone, period, active) {
           }`,
         },
       },
-      grid: { padding: { left: axisPadding, right: axisPadding } },
+      grid: {
+        borderColor: "color-mix(in srgb, var(--primary-text-color) 25%, transparent)",
+        padding: { left: axisPadding, right: axisPadding },
+      },
       yaxis: series.map(({ role, color, precision }) => ({
         seriesName: chartSeriesName(t, role), opposite: role !== "brix",
         showAlways: false, decimalsInFloat: precision, tickAmount: 4,
         labels: {
-          style: { colors: color },
+          style: { colors: `color-mix(in srgb, var(--primary-text-color) 55%, ${color})` },
           formatter: `EVAL:${numberFormat(precision, { maximumFractionDigits: precision })}`,
         },
       })),
@@ -170,11 +173,17 @@ function chartConfig(series, start, end, t, locale, timeZone, period, active) {
           return name + ': ' + formatted + ' ' + unit;
         }`,
       },
-      xaxis: { labels: { rotate: 0, showDuplicates: false, hideOverlappingLabels: true,
-        formatter: `EVAL:function(_value, timestamp) {
-          const format = ${dateFormat(period === 1 ? time : { ...date, month: "numeric" })};
-          return Number.isFinite(timestamp) ? format(timestamp) : '';
-        }` } },
+      xaxis: {
+        axisBorder: { color: "var(--secondary-text-color)" },
+        axisTicks: { color: "var(--secondary-text-color)" },
+        labels: {
+          rotate: 0, showDuplicates: false, hideOverlappingLabels: true,
+          formatter: `EVAL:function(_value, timestamp) {
+            const format = ${dateFormat(period === 1 ? time : { ...date, month: "numeric" })};
+            return Number.isFinite(timestamp) ? format(timestamp) : '';
+          }`,
+        },
+      },
       tooltip: {
         shared: true, intersect: false, hideEmptySeries: false,
         x: { formatter: `EVAL:${dateFormat({ ...date, ...time })}` },
@@ -202,8 +211,9 @@ class FermentationCard extends HTMLElement {
       ha-card { display: block; padding: 16px; overflow: hidden; }
       h2 { margin: 0; font-size: 1.25rem; overflow-wrap: anywhere; }
       p { margin: 8px 0; }
-      select, button { font: inherit; color: inherit; border: 1px solid var(--divider-color);
-        border-radius: 8px; background: var(--card-background-color); }
+      select, button { font: inherit; color: inherit;
+        border: 1px solid var(--ha-color-border-neutral-quiet, var(--divider-color));
+        border-radius: 8px; background: var(--ha-color-form-background, transparent); }
       button { padding: 5px 7px; min-height: 36px; cursor: pointer; }
       button[aria-pressed="true"] { color: var(--primary-color); border-color: currentColor; }
       button:disabled { opacity: .5; cursor: default; }
@@ -216,7 +226,6 @@ class FermentationCard extends HTMLElement {
       .metric strong { font-size: 1.05rem; }
       .controls { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
       .chart { min-width: 0; margin-inline: -14px; }
-      .chart > apexcharts-card { --ha-card-border-width: 0; --ha-card-box-shadow: none; }
       .dates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin: 12px 0; }
       .dates div { display: grid; gap: 4px; }
       details { margin-top: 10px; }
@@ -669,6 +678,19 @@ class FermentationCard extends HTMLElement {
       this.resizeChart();
     }, { once: true });
     this.chart.replaceChildren(apex);
+    // The embedded chart uses the Fermentation card as its surface.
+    const style = node("style");
+    style.textContent = `
+      ha-card {
+        background: transparent !important;
+        border: 0 !important;
+        box-shadow: none !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+      }
+      ha-card::before, ha-card::after { content: none !important; }
+    `;
+    apex.shadowRoot?.append(style);
   }
 
   clearChart() {
