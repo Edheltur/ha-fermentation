@@ -19,7 +19,7 @@ const TEXT = {
     confirmClear: "Очистить это значение пробы?", clearError: "Не удалось очистить значение пробы",
     outsideTable: "Вне таблицы поправок АС-3", attenuation: "Видимая степень сбраживания",
     final_abv: "Алкоголь по АС-3", refractometer_abv: "Алкоголь по рефрактометру",
-    details: "Подробности", ogSource: "Источник OG", workingWcf: "Рабочий WCF",
+    ogSource: "Источник OG", workingWcf: "Рабочий WCF",
     sampleWcf: "WCF по начальной пробе", hydrometerSource: "АС-3",
     refractometerSource: "Рефрактометр", device: "Устройство ферментации", pill: "Устройство Pill",
     pending: "Загрузка ферментаций…", save: "Сохранить", cancel: "Отмена",
@@ -43,7 +43,7 @@ const TEXT = {
     confirmClear: "Clear this sample value?", clearError: "Could not clear the sample value",
     outsideTable: "Outside the AS-3 correction table", attenuation: "Apparent attenuation",
     final_abv: "AS-3 ABV", refractometer_abv: "Refractometer ABV",
-    details: "Details", ogSource: "OG source", workingWcf: "Working WCF",
+    ogSource: "OG source", workingWcf: "Working WCF",
     sampleWcf: "WCF from initial sample", hydrometerSource: "AS-3",
     refractometerSource: "Refractometer", device: "Fermentation device", pill: "Pill device",
     pending: "Loading fermentations…", save: "Save", cancel: "Cancel",
@@ -312,7 +312,7 @@ class FermentationCard extends HTMLElement {
         clip-path: inset(50%);
         white-space: nowrap;
       }
-      .links { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 12px; }
+      ha-tip { display: block; margin-top: 12px; }
       a { color: var(--primary-color); }
       dialog { box-sizing: border-box; width: min(360px, calc(100vw - 32px)); padding: 16px;
         border: 1px solid var(--divider-color); border-radius: 12px; color: var(--primary-text-color);
@@ -347,15 +347,15 @@ class FermentationCard extends HTMLElement {
     this.samples = node("ha-expansion-panel");
     this.sampleValues = node("div");
     this.samples.append(this.sampleValues);
-    this.details = node("ha-expansion-panel");
-    this.diagnostic = node("div");
-    this.details.append(this.diagnostic);
+    this.details = node("ha-tip");
+    this.diagnostic = node("span");
     this.editError = node("p");
     this.editError.setAttribute("role", "alert");
-    this.links = node("div", null, "links");
+    this.links = node("span");
+    this.details.append(this.diagnostic, " ", this.links);
     this.sections = node("div");
     this.sections.append(this.summary, this.graph, this.results, this.dates, this.samples,
-      this.editError, this.details, this.links);
+      this.editError, this.details);
     card.append(this.picker, this.statusLabel, this.densityChange, this.message, this.sections);
     this.shadowRoot.append(style, card);
   }
@@ -502,7 +502,6 @@ class FermentationCard extends HTMLElement {
       this.chartStatus = null;
       this.chartKey = null;
       this.editError.textContent = "";
-      this.details.expanded = false;
       this.dateDialog?.close();
     }
     if (render) this.render();
@@ -742,22 +741,21 @@ class FermentationCard extends HTMLElement {
 
   renderDetails(batch) {
     const { t } = this;
-    this.details.header = t.details;
     const source = this.state(batch, "og")?.attributes.og_source;
     const diagnostics = [
       [t.ogSource, { hydrometer: t.hydrometerSource, refractometer: t.refractometerSource }[source] ?? "—"],
       [t.workingWcf, this.format(batch.wcf, 3)],
       [t.sampleWcf, this.format(this.value(batch, "sample_wcf"), 3)],
     ];
-    this.updateSection(this.diagnostic, diagnostics, () => diagnostics.map(
-      ([label, value]) => node("p", `${label} · ${value}`),
-    ));
+    this.updateSection(this.diagnostic, diagnostics, () => [
+      diagnostics.map(([label, value]) => `${label}: ${value}`).join(". ") + ".",
+    ]);
     this.updateSection(this.links, [batch.device, batch.pill], () => [
       [batch.device, t.device], [batch.pill, t.pill],
-    ].filter(([id]) => id).map(([id, label]) => {
+    ].filter(([id]) => id).flatMap(([id, label], index) => {
       const link = node("a", label);
       link.href = `/config/devices/device/${encodeURIComponent(id)}`;
-      return link;
+      return index ? [" · ", link] : [link];
     }));
   }
 
