@@ -10,7 +10,7 @@ const TEXT = {
     delta: "Изменение плотности за 24 часа",
     brix: "Плотность", temperature: "Температура", chartAbv: "Алкоголь",
     period: "Период графика", fullHistory: "Полная история", loading: "Загрузка истории…",
-    noHistory: "Нет записанной истории", hourly: "Средние за час",
+    noHistory: "Нет записанной истории",
     apex: "Установите и загрузите ресурс apexcharts-card для просмотра графика.",
     error: "Не удалось загрузить данные", historyError: "Не удалось загрузить историю",
     start: "Старт", finish: "Финиш", setStart: "Указать старт", setFinish: "Указать финиш",
@@ -34,7 +34,7 @@ const TEXT = {
     delta: "Gravity change over 24 hours",
     brix: "Gravity", temperature: "Temperature", chartAbv: "ABV",
     period: "Chart period", fullHistory: "Full history", loading: "Loading history…",
-    noHistory: "No recorded history", hourly: "Hourly averages",
+    noHistory: "No recorded history",
     apex: "Install and load the apexcharts-card resource to view the chart.",
     error: "Could not load data", historyError: "Could not load history",
     start: "Start", finish: "Finish", setStart: "Set start", setFinish: "Set finish",
@@ -213,6 +213,7 @@ class FermentationCard extends HTMLElement {
       ha-card { display: block; padding: 16px; overflow: hidden; }
       h2 { margin: 0; font-size: 1.25rem; overflow-wrap: anywhere; }
       p { margin: 8px 0; }
+      p[role="status"]:empty { margin: 0; }
       button { font: inherit; color: inherit;
         border: 1px solid var(--ha-color-border-neutral-quiet, var(--divider-color));
         border-radius: 8px; background: var(--ha-color-form-background, transparent);
@@ -753,7 +754,7 @@ class FermentationCard extends HTMLElement {
         this.mountChart(result.series, start, end);
         this.chartSeries = chartSeries;
       }
-      if (this.pendingChart === request) this.historyMessage.textContent = result.hourly ? this.t.hourly : "";
+      if (this.pendingChart === request) this.historyMessage.textContent = "";
     } catch {
       if (this.pendingChart !== request) return;
       this.chartKey = null;
