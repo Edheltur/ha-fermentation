@@ -1,0 +1,5 @@
+clear_sample:
+  target:
+    entity:
+      - integration: fermentation
+        domain: number

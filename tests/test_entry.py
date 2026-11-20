@@ -238,3 +238,98 @@ async def test_empty_controls_publish_icons(hass):
         state = hass.states.get(entity_id)
         assert state.state == "unknown"
         assert state.attributes["icon"] == icon
+
+
+async def test_report_flow_and_clearing_one_field(hass):
+    device = await pill(hass)
+    registry = er.async_get(hass)
+    registry.async_get_or_create("sensor", "rapt_ble", "pill-specific_gravity", device_id=device.id)
+    entry, other = [(await create(hass, device.id))["result"] for _ in range(2)]
+    hass.config.language = "ru"
+    hass.config.time_zone = "Asia/Yekaterinburg"
+    end = dt_util.utcnow() - timedelta(days=1)
+    batch = entry.runtime_data
+    batch.set_field("start", (end - timedelta(days=14, hours=2)).timestamp())
+    batch.set_field("end", end.timestamp())
+    batch.set_field("description", "Первая строка заметок\nВторая строка заметок")
+    batch.set_field("initial_hydrometer", 12.5)
+    batch.set_field("initial_sample_temperature", 21.5)
+    batch.set_field("initial_refractometer", 13.0)
+    batch.set_field("initial_ph", 5.4)
+
+    def sample(role):
+        return registry.async_get_entity_id("number", DOMAIN, f"{entry.unique_id}_{role}")
+
+    async def report():
+        menu = await hass.config_entries.options.async_init(entry.entry_id)
+        assert menu["menu_options"] == ["report"]
+        form = await hass.config_entries.options.async_configure(
+            menu["flow_id"], {"next_step_id": "report"}
+        )
+        field = next(iter(form["data_schema"].schema))
+        assert form["data_schema"].schema[field].config["multiline"]
+        return form["flow_id"], field.description["suggested_value"]
+
+    async def clear(role):
+        await hass.services.async_call(
+            DOMAIN, "clear_sample", {"entity_id": sample(role)}, blocking=True
+        )
+
+    _, without_final = await report()
+    assert "Конечная проба не внесена" in without_final
+    assert "12,5 °Bx при 21,5 °C → 12,59 °Bx при 20 °C" in without_final
+    batch.set_field("final_hydrometer", 3.0)
+    batch.set_field("final_sample_temperature", 19.9)
+    batch.set_field("final_ph", 0)
+    other.runtime_data.set_field("final_sample_temperature", 21)
+    flow_id, outside = await report()
+    assert len(outside) > 255
+    assert "Первая строка заметок\nВторая строка заметок" in outside
+    assert "3,0 °Bx при 19,9 °C · Вне таблицы поправок АС-3" in outside
+    assert "FG:" not in outside
+    assert hass.states.get(sample("final_hydrometer")).attributes["outside_correction_table"]
+    hass.config_entries.async_update_entry(entry, options={"existing_option": True})
+    result = await hass.config_entries.options.async_configure(flow_id, {"report": "Local edit"})
+    assert result["reason"] == "report_closed"
+    assert entry.options == {"existing_option": True}
+    await clear("final_sample_temperature")
+    _, corrected = await report()
+    assert "FG: 1,0117 SG" in corrected
+    assert "pH: 0,00" in corrected
+    assert "Вне таблицы поправок АС-3" not in corrected
+    assert hass.states.get(sample("final_sample_temperature")).state == "unknown"
+    assert other.data["final_sample_temperature"] == 21
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    with patch(
+        "custom_components.fermentation.config_flow.dt_util.utcnow",
+        return_value=end + timedelta(days=365),
+    ):
+        _, archived = await report()
+    assert archived == corrected
+    await clear("final_hydrometer")
+    assert entry.runtime_data.values["fg"] is None
+    assert entry.data["final_ph"] == 0
+
+
+async def test_dashboard_resolves_renamed_entities_and_filters_permissions(hass):
+    from unittest.mock import Mock
+
+    from custom_components.fermentation.dashboard import websocket_batches
+
+    device = await pill(hass)
+    registry = er.async_get(hass)
+    registry.async_get_or_create("sensor", "rapt_ble", "pill-specific_gravity", device_id=device.id)
+    first, second = [(await create(hass, device.id))["result"] for _ in range(2)]
+    original = registry.async_get_entity_id("sensor", DOMAIN, f"{first.unique_id}_brix")
+    new_id = "sensor.renamed_gravity"
+    registry.async_update_entity(original, new_entity_id=new_id)
+    await hass.async_block_till_done()
+    connection = Mock()
+    connection.user.is_admin = False
+    connection.user.permissions.check_entity.side_effect = lambda entity_id, _: entity_id == new_id
+    websocket_batches(hass, connection, {"id": 3})
+    result = connection.send_result.call_args.args[1]
+    assert [batch["id"] for batch in result["batches"]] == [first.unique_id]
+    assert result["batches"][0]["roles"] == {"brix": new_id}
+    assert result["batches"][0]["pill"] is None
+    assert second.unique_id != first.unique_id

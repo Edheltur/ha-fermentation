@@ -1,11 +1,12 @@
 """Density conversions and fermentation calculations in native instrument units."""
 
-from math import isfinite
+from math import asinh, isfinite, sinh, sqrt
 from statistics import median
 
 DAY = 86400
 WINDOW = 1800
 SG_MIN, SG_MAX = 0.8, 1.5
+_BRIX_A, _BRIX_B, _BRIX_C, _BRIX_D = 182.4601, -775.6821, 1262.7794, -669.5622
 
 
 def numeric(value):
@@ -22,21 +23,26 @@ def sg_reading(value):
 
 
 def brix(sg):
-    return ((182.4601 * sg - 775.6821) * sg + 1262.7794) * sg - 669.5622
+    return ((_BRIX_A * sg + _BRIX_B) * sg + _BRIX_C) * sg + _BRIX_D
+
+
+_BRIX_MIN, _BRIX_MAX = brix(SG_MIN), brix(SG_MAX)
+_BRIX_CENTER = -_BRIX_B / (3 * _BRIX_A)
+_BRIX_AT_CENTER = brix(_BRIX_CENTER)
+_BRIX_HEIGHT = sqrt((_BRIX_C - _BRIX_B**2 / (3 * _BRIX_A)) / (3 * _BRIX_A))
+_BRIX_SCALE = 2 * _BRIX_A * _BRIX_HEIGHT**3
 
 
 def specific_gravity(bx):
-    """Invert the monotonic polynomial within the manual instrument range."""
-    low, high = SG_MIN, SG_MAX
-    if not brix(low) <= bx <= brix(high):
+    """Solve the depressed cubic with its single real root."""
+    if not _BRIX_MIN <= bx <= _BRIX_MAX:
         return None
-    for _ in range(52):
-        mid = (low + high) / 2
-        if brix(mid) < bx:
-            low = mid
-        else:
-            high = mid
-    return (low + high) / 2
+    if bx == _BRIX_MIN:
+        return SG_MIN
+    if bx == _BRIX_MAX:
+        return SG_MAX
+    sg = _BRIX_CENTER + 2 * _BRIX_HEIGHT * sinh(asinh((bx - _BRIX_AT_CENTER) / _BRIX_SCALE) / 3)
+    return min(SG_MAX, max(SG_MIN, sg))
 
 
 def refractometer_abv(initial, final, wcf):
