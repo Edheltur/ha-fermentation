@@ -45,17 +45,17 @@ def specific_gravity(bx):
     return min(SG_MAX, max(SG_MIN, sg))
 
 
-def refractometer_abv(initial, final, wcf):
-    """Estimate finished-beer ABV with Terrill's linear refractometer correction."""
+def optical_gravities(initial, final, wcf):
+    """Return optical OG and alcohol-corrected FG for a paired sample."""
     if initial is None or final is None or wcf is None or wcf <= 0:
-        return None
+        return None, None
     initial_brix = initial / wcf
     og = specific_gravity(initial_brix)
     if og is None or og <= 1 or final >= initial:
-        return None
+        return None, None
     final_brix = final / wcf
     fg = 1 - 0.00085683 * initial_brix + 0.0034941 * final_brix
-    return 131.25 * (og - fg)
+    return og, sg_reading(fg)
 
 
 # Source: ГОСТ 6687.2-90, appendix 1, table 1 (saccharometer temperature corrections).
@@ -93,36 +93,45 @@ def hydrometer_at_20(reading, temperature):
     return reading + (low + t * (high - low)) / 100
 
 
-def manual_results(data):
+def gravity_results(data, pill_og=None, pill_fg=None):
     initial = hydrometer_at_20(
         data.get("initial_hydrometer"), data.get("initial_sample_temperature")
     )
     optical = data.get("initial_refractometer")
     final = hydrometer_at_20(data.get("final_hydrometer"), data.get("final_sample_temperature"))
     wcf = data.get("wcf")
-    source = None
-    initial_brix = None
-    if initial is not None:
-        initial_brix = initial
-        source = "hydrometer"
-    elif optical is not None and wcf:
+    initial_brix = initial
+    og = specific_gravity(initial) if initial is not None else None
+    source = "hydrometer"
+    if og is None and optical is not None and wcf:
         initial_brix = optical / wcf
+        og = specific_gravity(initial_brix)
         source = "refractometer"
-    og = specific_gravity(initial_brix) if initial_brix is not None else None
     if og is None:
-        source = None
+        og = pill_og
+        initial_brix = brix(og) if og is not None else None
+        source = "pill" if og is not None else None
+    optical_og, optical_fg = optical_gravities(optical, data.get("final_refractometer"), wcf)
     fg = specific_gravity(final) if final is not None else None
+    fg_source = "hydrometer"
+    if fg is None:
+        fg = optical_fg
+        fg_source = "refractometer"
+    if fg is None:
+        fg = pill_fg
+        fg_source = "pill" if fg is not None else None
     difference = og - fg if og is not None and fg is not None else None
     return {
         "og": og,
         "fg": fg,
         "og_source": source,
+        "fg_source": fg_source,
         "applied_wcf": wcf if source == "refractometer" else None,
         "sample_wcf": optical / initial
         if optical is not None and initial and initial > 0
         else None,
         "final_abv": difference * 131.25 if difference is not None else None,
-        "refractometer_abv": refractometer_abv(optical, data.get("final_refractometer"), wcf),
+        "refractometer_abv": (optical_og - optical_fg) * 131.25 if optical_fg is not None else None,
         "attenuation": difference * 100 / (og - 1)
         if difference is not None and initial_brix > 0 and og > 1
         else None,

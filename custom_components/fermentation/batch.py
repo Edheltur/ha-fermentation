@@ -1,6 +1,7 @@
 """Lifecycle and minute samples of one fermentation."""
 
 from datetime import UTC, datetime
+from statistics import fmean
 
 from homeassistant.core import callback
 from homeassistant.exceptions import ServiceValidationError
@@ -14,8 +15,11 @@ from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_conversion import TemperatureConverter
 
-from .calculation import DAY, WINDOW, brix, daily_delta, manual_results, numeric, sg_reading
+from .calculation import DAY, WINDOW, brix, daily_delta, gravity_results, numeric, sg_reading
 from .const import DOMAIN
+
+PILL_SETTLING = 30 * 60
+PILL_WINDOW = 10 * 60
 
 
 def sample_store(hass, entry):
@@ -62,7 +66,7 @@ class Batch:
         now = dt_util.utcnow()
         timestamp = now.timestamp()
         self.trim(timestamp)
-        self.delta = daily_delta(self.points, int(timestamp // 60) * 60)
+        self.update_windows(timestamp)
         for key in ("start", "end"):
             boundary = self.data.get(key)
             if boundary is not None and boundary > timestamp:
@@ -127,12 +131,40 @@ class Batch:
             return TemperatureConverter.convert(value, unit, "°C")
         return value
 
+    def gravity_windows(self):
+        start, end = self.data.get("start"), self.data.get("end")
+        initial = start + PILL_SETTLING if start is not None else None
+        final = end - PILL_SETTLING - PILL_WINDOW if end is not None else None
+        return initial, final
+
     def trim(self, now):
+        windows = [t for t in self.gravity_windows() if t is not None]
         self.points = [
             (t, sg)
             for t, sg in self.points
-            if now - DAY - WINDOW < t <= now and contains(self.data, t)
+            if t <= now
+            and contains(self.data, t)
+            and (now - DAY - WINDOW < t or any(w <= t < w + PILL_WINDOW for w in windows))
         ]
+
+    def update_windows(self, now):
+        start, end = self.data.get("start"), self.data.get("end")
+
+        def mean(window):
+            if (
+                window is None
+                or start is None
+                or window < start
+                or window + PILL_WINDOW > min(now, end if end is not None else now)
+            ):
+                return None
+            values = [sg for t, sg in self.points if window <= t < window + PILL_WINDOW]
+            return fmean(values) if values else None
+
+        initial, final = self.gravity_windows()
+        self.pill_og = mean(initial)
+        self.pill_fg = mean(final) if end is not None and end <= now else None
+        self.delta = daily_delta(self.points, int(now // 60) * 60)
 
     @callback
     def sample(self, now):
@@ -143,7 +175,7 @@ class Batch:
         sg = self.reading("sg")
         if sg is not None and (not self.points or self.points[-1][0] < timestamp):
             self.points.append((timestamp, sg))
-        self.delta = daily_delta(self.points, timestamp)
+        self.update_windows(timestamp)
         self.store.async_delay_save(lambda: self.points, 1)
         self.refresh()
 
@@ -153,10 +185,10 @@ class Batch:
         active = contains(self.data, now)
         start, end = self.data.get("start"), self.data.get("end")
         sg = self.reading("sg") if active else None
-        manual = manual_results(self.data)
-        og = manual["og"]
+        results = gravity_results(self.data, self.pill_og, self.pill_fg)
+        og = results["og"]
         self.values = {
-            **manual,
+            **results,
             "active": active,
             "sg": sg,
             "duration": int(min(now, end if end is not None else now) - start)

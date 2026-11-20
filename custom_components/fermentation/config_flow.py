@@ -152,6 +152,7 @@ class FermentationOptionsFlow(OptionsFlow):
             dt_util.utcnow().timestamp(),
             config.time_zone,
             config.language,
+            entry.runtime_data.values,
         ).render()
         return self.async_show_form(
             step_id="report",
