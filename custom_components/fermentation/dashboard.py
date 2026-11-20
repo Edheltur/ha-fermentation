@@ -6,6 +6,9 @@ import probatio as vol
 from homeassistant.auth.permissions.const import POLICY_READ
 from homeassistant.components import websocket_api
 from homeassistant.components.http import StaticPathConfig
+from homeassistant.components.lovelace.const import CONF_RESOURCE_TYPE_WS, LOVELACE_DATA
+from homeassistant.components.lovelace.resources import ResourceStorageCollection
+from homeassistant.const import CONF_URL
 from homeassistant.core import callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
@@ -13,18 +16,31 @@ from homeassistant.helpers.recorder import DATA_INSTANCE
 
 from .const import DOMAIN
 
+STATIC_URL = f"/api/{DOMAIN}/static"
+CARD_URL = f"{STATIC_URL}/fermentation-card.js"
+
 
 async def async_setup_dashboard(hass):
     await hass.http.async_register_static_paths(
         [
             StaticPathConfig(
-                "/api/fermentation/static",
+                STATIC_URL,
                 str(Path(__file__).with_name("frontend")),
                 False,
             )
         ]
     )
     websocket_api.async_register_command(hass, websocket_batches)
+
+    if (lovelace := hass.data.get(LOVELACE_DATA)) is not None and isinstance(
+        resources := lovelace.resources, ResourceStorageCollection
+    ):
+        # Storage resources are loaded lazily, including entries added through the UI.
+        await resources.async_get_info()
+        if not any(
+            resource[CONF_URL].partition("?")[0] == CARD_URL for resource in resources.async_items()
+        ):
+            await resources.async_create_item({CONF_URL: CARD_URL, CONF_RESOURCE_TYPE_WS: "module"})
 
 
 @websocket_api.websocket_command({vol.Required("type"): "fermentation/batches"})
