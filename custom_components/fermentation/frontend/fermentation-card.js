@@ -93,21 +93,27 @@ function chartConfig(series, start, end, t, locale, timeZone) {
     graph_span: `${end - start}ms`,
     span: { start: "year", offset: `${offset >= 0 ? "+" : ""}${offset}ms` },
     header: { show: false },
-    yaxis: series.map(({ role, color, unit, precision }) => ({
-      id: role, opposite: role !== "brix", decimals: precision,
-      apex_config: {
-        tickAmount: 4,
-        title: { text: unit, style: { color } },
-        labels: { style: { colors: color } },
-      },
-    })),
-    series: series.map(({ role, entity, color, precision, points }) => ({
-      entity, name: t[role], color, yaxis_id: role, float_precision: precision,
+    series: series.map(({ role, entity, color, precision }) => ({
+      entity, name: t[role], color, float_precision: precision,
       stroke_width: 2, stroke_dash: role === "abv" ? 5 : 0, curve: "straight",
-      extend_to: false, data_generator: `return ${JSON.stringify(points)};`,
+      extend_to: false, data_generator: "return entity.attributes.fermentation_points;",
     })),
     apex_config: {
-      chart: { height: 260, toolbar: { show: false }, zoom: { enabled: false }, animations: { enabled: false } },
+      chart: {
+        height: 260, toolbar: { show: false }, zoom: { enabled: false }, animations: { enabled: false },
+        events: {
+          updated: `EVAL:function(chart) {
+            chart.el.dispatchEvent(new CustomEvent("fermentation-chart-ready", {
+              detail: chart, bubbles: true, composed: true
+            }));
+          }`,
+        },
+      },
+      yaxis: series.map(({ role, color, unit, precision }) => ({
+        seriesName: t[role], opposite: role !== "brix", decimalsInFloat: precision, tickAmount: 4,
+        title: { text: unit, style: { color } },
+        labels: { style: { colors: color } },
+      })),
       legend: { show: false },
       xaxis: { labels: { formatter: `EVAL:function(_value, timestamp) {
         const format = ${dateFormatter.slice(5)};
@@ -220,10 +226,11 @@ class FermentationCard extends HTMLElement {
   getCardSize() { return 7; }
 
   connectedCallback() {
+    this.watchConnection();
     this.refreshBatches();
-    this.timer = setInterval(() => {
-      this.refreshBatches();
-      if (this.chartStatus === "active") this.refreshGraph(true);
+    this.timer = setInterval(async () => {
+      await this.refreshBatches();
+      if (!this.batchesError && this.chartStatus === "active") this.refreshGraph(true);
     }, REFRESH);
     customElements.whenDefined("apexcharts-card").then(() => this.refreshGraph(true));
   }
@@ -231,6 +238,7 @@ class FermentationCard extends HTMLElement {
   disconnectedCallback() {
     clearInterval(this.timer);
     clearTimeout(this.registryTimer);
+    this.watchConnection(null);
     this.pendingChart = null;
     this.dateDialog?.close();
   }
@@ -239,7 +247,13 @@ class FermentationCard extends HTMLElement {
     const previous = this._hass;
     this._hass = hass;
     if (!this.isConnected) return;
-    if (previous?.connection !== hass.connection) this.refreshBatches();
+    if (previous?.connection !== hass.connection) {
+      this.watchConnection();
+      this.pendingChart = null;
+      this.chartKey = null;
+      this.historySnapshot = null;
+      this.refreshBatches();
+    }
     if (previous?.devices !== hass.devices || previous?.entities !== hass.entities) {
       clearTimeout(this.registryTimer);
       this.registryTimer = setTimeout(() => this.refreshBatches(), 250);
@@ -250,6 +264,14 @@ class FermentationCard extends HTMLElement {
     );
     if (inputsChanged || previous?.locale !== hass.locale
         || previous?.config.time_zone !== hass.config.time_zone) this.render();
+  }
+
+  watchConnection(connection = this._hass?.connection) {
+    if (connection === this.connection) return;
+    this.onConnectionReady ??= () => this.refreshBatches();
+    this.connection?.removeEventListener?.("ready", this.onConnectionReady);
+    this.connection = connection;
+    connection?.addEventListener?.("ready", this.onConnectionReady);
   }
 
   get locale() {
@@ -366,7 +388,7 @@ class FermentationCard extends HTMLElement {
     this.sections.hidden = !batch;
     if (!batch) {
       this.pendingChart = null;
-      this.chart.replaceChildren();
+      this.clearChart();
       return;
     }
     if (status !== this.chartStatus) {
@@ -605,9 +627,26 @@ class FermentationCard extends HTMLElement {
     }));
   }
 
-  apexHass() {
-    // The span anchor uses the browser clock. Axis and tooltip labels use the HA zone.
-    return { ...this._hass, locale: { ...this._hass.locale, time_zone: "local" } };
+  mountChart(series, start, end) {
+    const apex = document.createElement("apexcharts-card");
+    apex.setConfig(chartConfig(series, start, end, this.t, this.locale, this._hass.config.time_zone));
+    const states = { ...this._hass.states };
+    for (const { entity, points } of series) {
+      states[entity] = { ...states[entity],
+        attributes: { ...states[entity]?.attributes, fermentation_points: points } };
+    }
+    apex.hass = { ...this._hass, states, locale: { ...this._hass.locale, time_zone: "local" } };
+    apex.addEventListener("fermentation-chart-ready", ({ detail }) => {
+      if (this.chart.firstChild === apex) this.apexChart = detail;
+    }, { once: true });
+    this.chart.replaceChildren(apex);
+  }
+
+  clearChart() {
+    this.apexChart?.destroy();
+    this.apexChart = null;
+    this.chartSeries = null;
+    this.chart.replaceChildren();
   }
 
   async refreshGraph(force = false) {
@@ -615,7 +654,8 @@ class FermentationCard extends HTMLElement {
     if (!this.isConnected || !batch || this.chartStatus === "scheduled") {
       this.pendingChart = null;
       this.chartKey = null;
-      this.chart.replaceChildren();
+      this.historySnapshot = null;
+      this.clearChart();
       return;
     }
     const [start, end] = historyWindow(batch, this.period, Date.now());
@@ -624,35 +664,45 @@ class FermentationCard extends HTMLElement {
     const key = JSON.stringify([batch.id, batch.start, batch.end, this.chartStatus, this.period,
       this.showAbv, series, this.locale, this._hass.config.time_zone,
       this.coverage?.recorder, start < this.coverage?.oldest * 1000]);
-    if (key === this.chartKey && !force) return;
+    if (this.pendingChart?.key === key || (key === this.chartKey && !force)) return;
     if (key !== this.chartKey) {
-      this.chart.replaceChildren();
+      this.historySnapshot = null;
+      this.clearChart();
       this.historyMessage.textContent = this.t.loading;
     }
     this.chartKey = key;
-    const request = {};
-    this.pendingChart = request;
     if (!customElements.get("apexcharts-card")) {
       this.historyMessage.textContent = this.t.apex;
       return;
     }
+    const request = { key };
+    this.pendingChart = request;
     try {
-      const result = await loadHistory(this._hass, series, start, end, this.coverage);
+      const result = await loadHistory(this._hass, series, start, end, this.coverage, this.historySnapshot);
       if (this.pendingChart !== request) return;
+      this.historySnapshot = result.snapshot;
       if (!result.series.length) {
-        this.chart.replaceChildren();
+        this.clearChart();
         this.historyMessage.textContent = this.t.noHistory;
         return;
       }
-      const config = chartConfig(result.series, start, end, this.t, this.locale, this._hass.config.time_zone);
-      const apex = document.createElement("apexcharts-card");
-      apex.setConfig(config);
-      apex.hass = this.apexHass();
-      this.chart.replaceChildren(apex);
-      this.historyMessage.textContent = result.hourly ? this.t.hourly : "";
+      const chartSeries = result.series.map(({ entity }) => entity).join(",");
+      if (this.apexChart && this.chartSeries === chartSeries) {
+        await this.apexChart.updateOptions({
+          xaxis: { min: start, max: end },
+          series: result.series.map(({ role, points }) => ({ name: this.t[role], data: points })),
+        }, false, false);
+      } else {
+        this.mountChart(result.series, start, end);
+        this.chartSeries = chartSeries;
+      }
+      if (this.pendingChart === request) this.historyMessage.textContent = result.hourly ? this.t.hourly : "";
     } catch {
       if (this.pendingChart !== request) return;
+      this.chartKey = null;
       this.historyMessage.textContent = this.t.historyError;
+    } finally {
+      if (this.pendingChart === request) this.pendingChart = null;
     }
   }
 }

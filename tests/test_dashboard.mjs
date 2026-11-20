@@ -81,3 +81,69 @@ test("empty history leaves the chart empty", async () => {
   const result = await loadHistory(hass, series, end - DAY, end, { recorder: true, oldest: null });
   assert.deepEqual(result.series, []);
 });
+
+test("long history keeps extrema and unavailable boundaries within the point budget", async () => {
+  const start = end - 30 * DAY;
+  const minute = 60_000;
+  const gap = start + 42 * minute;
+  const recovery = gap + 3 * minute;
+  const peak = start + 50 * minute;
+  const states = Array.from({ length: 30 * 24 * 60 }, (_, i) => ({
+    lu: (start + i * minute) / 1000,
+    s: i >= 42 && i < 45 ? "unavailable" : i === 50 ? "50" : String(10 + i % 13 / 10),
+  }));
+  const hass = { callWS: async () => ({ "sensor.gravity": states }) };
+  const { series: [gravity] } = await loadHistory(hass, series.slice(0, 1), start, end,
+    { recorder: true, oldest: start / 1000 });
+  assert.ok(gravity.points.length < 1000, `got ${gravity.points.length} points`);
+  const points = new Map(gravity.points);
+  assert.equal(points.get(gap - 1), Number(states[41].s));
+  assert.equal(points.get(gap), null);
+  assert.equal(points.get(recovery - 1), null);
+  assert.equal(points.get(recovery), Number(states[45].s));
+  assert.equal(points.get(peak), 50);
+});
+
+test("minute refresh reads a short overlap and retains earlier history", async () => {
+  const start = end - DAY;
+  const coverage = { recorder: true, oldest: start / 1000 };
+  const minute = 60_000;
+  const ids = series.slice(0, 1);
+  const queries = [];
+  const hass = {
+    async callWS(message) {
+      const since = Date.parse(message.start_time);
+      queries.push(since);
+      return { "sensor.gravity": [
+        { lu: since / 1000, s: since === start ? "8" : "6" },
+        { lu: (since === start ? end - HOUR : end + 1000) / 1000, s: since === start ? "6" : "5" },
+      ] };
+    },
+  };
+  const first = await loadHistory(hass, ids, start, end, coverage);
+  const second = await loadHistory(hass, ids, start + minute, end + minute, coverage, first.snapshot);
+  assert.deepEqual(queries, [start, end - 2 * minute]);
+  const points = new Map(second.series[0].points);
+  assert.equal(points.get(start + minute), 8);
+  assert.equal(points.get(end - HOUR), 6);
+  assert.equal(points.get(end + minute), 5);
+});
+
+test("hourly history is reused within the hour and refreshed at the boundary", async () => {
+  const start = end - 35 * DAY;
+  const coverage = { recorder: true, oldest: (end - 30 * DAY) / 1000 };
+  const queries = [];
+  const hass = {
+    async callWS(message) {
+      const since = Date.parse(message.start_time);
+      queries.push(since);
+      return { "sensor.gravity": [{ start: since, end: since + HOUR, mean: 8 }] };
+    },
+  };
+  const first = await loadHistory(hass, series, start, end, coverage);
+  const second = await loadHistory(hass, series, start, end + HOUR / 2, coverage, first.snapshot);
+  const third = await loadHistory(hass, series, start, end + HOUR, coverage, second.snapshot);
+  assert.deepEqual(queries, [start, end - HOUR]);
+  assert.equal(new Map(third.series[0].points).get(start), 8);
+  assert.equal(new Map(third.series[0].points).get(end - HOUR), 8);
+});
