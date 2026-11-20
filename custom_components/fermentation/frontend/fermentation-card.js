@@ -156,6 +156,8 @@ function chartConfig(series, start, end, t, locale, timeZone, period, active) {
         seriesName: chartSeriesName(t, role), opposite: role !== "brix",
         showAlways: false, decimalsInFloat: precision, tickAmount: 4,
         labels: {
+          // A positive offset moves the right-side labels toward the plot.
+          offsetX: role === "abv" ? 14 : 0,
           style: { colors: color },
           formatter: `EVAL:${numberFormat(precision, { maximumFractionDigits: precision })}`,
         },
